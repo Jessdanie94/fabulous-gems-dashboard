@@ -2,7 +2,7 @@ require('dotenv').config();
 const axios = require('axios');
 
 const STORE = process.env.SHOPIFY_STORE_DOMAIN;
-const TOKEN = process.env.SHOPIFY_API_ACCESS_TOKEN;
+const TOKEN = process.env.SHOPIFY_API_TOKEN;
 
 const shopify = axios.create({
   baseURL: `https://${STORE}/admin/api/2025-01`,
