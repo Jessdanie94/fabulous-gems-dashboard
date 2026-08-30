@@ -1,13 +1,28 @@
-name = "jessesdigitalventures"
+# This file stores configurations for your Shopify app.
+
 client_id = "395e8ebac89ae543caee534d2c500f33"
-application_url = "https://fabulousgemsparlor.store"
+name = "Fabulous Gems Dashboard"
+application_url = "https://fabulousgemsparlor-store.onrender.com"
+
+[auth]
+redirect_urls = [
+  "https://fabulousgemsparlor-store.onrender.com/auth/callback",
+  "https://fabulousgemsparlor-store.onrender.com/auth/shopify/callback"
+]
 
 [access_scopes]
-scopes = "read_analytics,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_checkouts,read_customers,write_customers,read_price_rules,write_price_rules,read_discounts,write_discounts,write_inventory,read_inventory,read_metaobjects,write_metaobjects,read_orders,write_orders,read_products,write_products,read_script_tags,write_script_tags,read_shopify_payments_payouts,read_shopify_payments_bank_accounts,read_themes,write_themes"
-
-[build]
-automatically_update_urls_on_dev = true
-dev_store_url = "ppd1xp-1c.myshopify.com"
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_orders,read_products,read_finances"
 
 [webhooks]
-api_version = "2025-01"
+api_version = "2024-10"
+
+  # Handled by: /app/routes/webhooks.app.uninstalled.tsx
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = ["app/uninstalled"]
+
+  # Handled by: /app/routes/webhooks.app.scopes_update.tsx
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"

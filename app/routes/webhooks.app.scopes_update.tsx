@@ -1,21 +1,22 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import db from "../db.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-    const { payload, session, topic, shop } = await authenticate.webhook(request);
-    console.log(`Received ${topic} webhook for ${shop}`);
+  const { topic, shop, session, payload } =
+    await authenticate.webhook(request);
 
-    const current = payload.current as string[];
-    if (session) {
-        await db.session.update({   
-            where: {
-                id: session.id
-            },
-            data: {
-                scope: current.toString(),
-            },
-        });
-    }
-    return new Response();
+  console.log(`Received ${topic} webhook for ${shop}`);
+
+  // Webhook requests can trigger after an app is uninstalled
+  // If the app is already uninstalled, the session may be undefined.
+  if (!session) {
+    throw new Response();
+  }
+
+  // The topics handled here should be declared in the shopify.app.toml.
+  // More info: https://shopify.dev/docs/apps/build/cli-for-apps/app-configuration#webhooks
+  // Use payload to do something with the webhook data.
+  console.log(payload);
+
+  return new Response();
 };

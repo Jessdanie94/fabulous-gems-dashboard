@@ -1,13 +1,4 @@
-import {
-  Box,
-  Card,
-  Layout,
-  Link,
-  List,
-  Page,
-  Text,
-  BlockStack,
-} from "@shopify/polaris";
+import { Card, Layout, Link, List, Page, Text, BlockStack } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 
 export default function AdditionalPage() {
@@ -34,8 +25,8 @@ export default function AdditionalPage() {
               <Text as="p" variant="bodyMd">
                 To create your own page and have it show up in the app
                 navigation, add a page inside <Code>app/routes</Code>, and a
-                link to it in the <Code>&lt;NavMenu&gt;</Code> component found
-                in <Code>app/routes/app.jsx</Code>.
+                link to it in the <Code>&lt;NavMenu&gt;</Code> component found in{" "}
+                <Code>app/routes/app.tsx</Code>.
               </Text>
             </BlockStack>
           </Card>
@@ -49,7 +40,7 @@ export default function AdditionalPage() {
               <List>
                 <List.Item>
                   <Link
-                    url="https://shopify.dev/docs/apps/design-guidelines/navigation#app-nav"
+                    url="https://shopify.dev/docs/apps/design-guidelines/navigation#702702"
                     target="_blank"
                     removeUnderline
                   >
