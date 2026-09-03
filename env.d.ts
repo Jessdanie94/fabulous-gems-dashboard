@@ -1,1 +1,2 @@
-/// <reference types="@shopify/app-bridge-types" />
+/// <reference types="vite/client" />
+/// <reference types="@remix-run/node" />
