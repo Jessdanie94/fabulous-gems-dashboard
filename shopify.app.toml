@@ -1,6 +1,6 @@
 # This file stores configurations for your Shopify app.
 
-client_id = "395e8ebac89ae543caee534d2c500f33"
+client_id = "39a6bccb7e29a538d4ec8ac41dc1aa84"
 name = "Fabulous Gems Dashboard"
 application_url = "https://fabulousgemsparlor-store.onrender.com"
 
@@ -11,18 +11,15 @@ redirect_urls = [
 ]
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,read_products,read_finances"
+scopes = "read_orders,write_orders,read_products,read_finances"
 
 [webhooks]
 api_version = "2024-10"
 
-  # Handled by: /app/routes/webhooks.app.uninstalled.tsx
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"
   topics = ["app/uninstalled"]
 
-  # Handled by: /app/routes/webhooks.app.scopes_update.tsx
   [[webhooks.subscriptions]]
   topics = [ "app/scopes_update" ]
   uri = "/webhooks/app/scopes_update"
