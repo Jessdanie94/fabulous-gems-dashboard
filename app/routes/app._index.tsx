@@ -16,15 +16,26 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getDashboardData } from "../services/sellvia.server";
+import {
+  getShopifyPayouts,
+  formatPayoutRows,
+} from "../services/shopify-finances.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
 
   let sellviaData = null;
-  let shopifyData = {
-    balance: "0.00",
-    currency: "USD",
-    rows: [] as string[][],
+  let shopifyPayouts = {
+    balance: {
+      amount: "0.00",
+      currency: "USD",
+    },
+    payouts: [] as Array<{
+      status: string;
+      amount: string;
+      currency: string;
+      issuedAt: string;
+    }>,
   };
 
   try {
@@ -35,11 +46,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Continue without Sellvia data if there's an error
   }
 
-  // TODO: connect to Shopify Finances API for real payout data
-  // For now, using placeholder data
+  try {
+    // Fetch real Shopify payout data
+    shopifyPayouts = await getShopifyPayouts(request);
+  } catch (error) {
+    console.error("Error fetching Shopify payouts:", error);
+    // Continue with placeholder data if there's an error
+  }
 
   return json({
-    shopify: shopifyData,
+    shopify: shopifyPayouts,
     sellvia: sellviaData,
   });
 };
@@ -48,9 +64,10 @@ export default function PayoutsDashboard() {
   const { shopify, sellvia } = useLoaderData<typeof loader>();
 
   // Format currency
-  const formatCurrency = (amount: number | undefined, currency = "USD") => {
+  const formatCurrency = (amount: number | string | undefined, currency = "USD") => {
     if (!amount) return `${currency} $0.00`;
-    return `${currency} $${(amount / 100).toFixed(2)}`;
+    const numAmount = typeof amount === "string" ? parseFloat(amount) : amount;
+    return `${currency} $${(numAmount / 100).toFixed(2)}`;
   };
 
   // Prepare product rows for data table
@@ -60,6 +77,9 @@ export default function PayoutsDashboard() {
       product.units_sold?.toString() || "0",
       formatCurrency(product.revenue),
     ]) || [];
+
+  // Format payout rows from Shopify data
+  const payoutRows = formatPayoutRows(shopify.payouts);
 
   return (
     <Page>
@@ -80,7 +100,8 @@ export default function PayoutsDashboard() {
                     Shopify Balance
                   </Text>
                   <Text as="p" variant="headingLg" tone="success">
-                    {shopify.currency} ${shopify.balance}
+                    {shopify.balance.currency} $
+                    {parseFloat(shopify.balance.amount).toFixed(2)}
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Pending payout
@@ -220,16 +241,16 @@ export default function PayoutsDashboard() {
               <BlockStack gap="400">
                 <InlineStack align="space-between">
                   <Text as="h2" variant="headingMd">
-                    Recent Payouts
+                    Recent Payouts (Last 10)
                   </Text>
-                  <Badge tone="info">Shopify Payments</Badge>
+                  <Badge tone="success">Shopify Payments</Badge>
                 </InlineStack>
 
                 <Box>
                   <DataTable
                     columnContentTypes={["text", "numeric", "text"]}
                     headings={["Status", "Amount", "Date"]}
-                    rows={shopify.rows}
+                    rows={payoutRows}
                     emptyState={
                       <Box padding="400">
                         <Text
