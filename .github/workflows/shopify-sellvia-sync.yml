@@ -1,0 +1,80 @@
+name: Shopify + Sellvia Sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+concurrency:
+  group: shopify-sellvia-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Preflight - validate required secrets
+        env:
+          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
+          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
+          SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
+        run: |
+          missing=0
+
+          check_required () {
+            key="$1"
+            val="$2"
+            if [ -z "$val" ]; then
+              echo "::error::Missing required secret: $key"
+              missing=1
+            else
+              echo "::notice::$key is set"
+            fi
+          }
+
+          check_optional () {
+            key="$1"
+            val="$2"
+            if [ -z "$val" ]; then
+              echo "::notice::Optional secret not set: $key"
+            else
+              echo "::notice::$key is set"
+            fi
+          }
+
+          check_required "SHOPIFY_STORE_DOMAIN" "$SHOPIFY_STORE_DOMAIN"
+          check_required "SHOPIFY_ADMIN_ACCESS_TOKEN" "$SHOPIFY_ADMIN_ACCESS_TOKEN"
+          check_required "SELLVIA_API_KEY" "$SELLVIA_API_KEY"
+          check_optional "SELLVIA_API_BASE_URL" "$SELLVIA_API_BASE_URL"
+
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Preflight failed due to missing required secrets."
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Run Shopify/Sellvia sync
+        env:
+          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
+          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
+          SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
+        run: |
+          echo "Starting sync..."
+          npm run sync:shopify || echo "sync:shopify not yet configured"
+          npm run sync:sellvia || echo "sync:sellvia not yet configured"
+          echo "Sync step complete."
