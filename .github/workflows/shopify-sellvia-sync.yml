@@ -21,8 +21,8 @@ jobs:
       - name: Preflight - validate required secrets
         env:
           SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
-          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
-          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
+          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN || secrets.SHOPIFY_API_TOKEN }}
+          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY || secrets.SELLVIA_MASTER_KEY }}
           SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
         run: |
           missing=0
@@ -70,8 +70,8 @@ jobs:
       - name: Run Shopify/Sellvia sync
         env:
           SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
-          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
-          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
+          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN || secrets.SHOPIFY_API_TOKEN }}
+          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY || secrets.SELLVIA_MASTER_KEY }}
           SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
         run: |
           echo "Starting sync..."
