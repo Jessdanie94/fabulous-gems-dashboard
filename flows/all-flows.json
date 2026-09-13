@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "store": "ppd1xp-1c.myshopify.com",
+  "flows": [
+    {
+      "id": "flow_1_circuit_breaker",
+      "title": "FLOW_1: $15/day Circuit Breaker",
+      "trigger": { "type": "scheduled", "cron": "0 * * * *", "description": "Runs every hour to check daily ad spend" },
+      "action": { "type": "http_request", "endpoint": "/api/circuit-breaker", "method": "POST", "body": { "max": 15 }, "description": "Pause All-Product campaign if spend exceeds $15/day" }
+    },
+    {
+      "id": "flow_2_auto_fulfill",
+      "title": "FLOW_2: Auto Fulfill Sellvia",
+      "trigger": { "type": "shopify_webhook", "topic": "orders/paid", "description": "Fires when a Shopify order is paid" },
+      "action": { "type": "http_request", "endpoint": "/api/auto-fulfill", "method": "POST", "body": "{{ order }}", "description": "Submit order to Sellvia for fulfillment" }
+    },
+    {
+      "id": "flow_3_tag_dead_store_orders",
+      "title": "FLOW_3: Tag Duplicate Orders from Closed Stores",
+      "trigger": { "type": "shopify_webhook", "topic": "orders/create", "description": "Fires on every new order" },
+      "condition": { "description": "Source matches closed store IDs 5809673777 or 574805867" },
+      "action": { "type": "http_request", "endpoint": "/api/tag-dead-store-orders", "method": "POST", "body": "{{ order }}", "description": "Tag order as dead-store-duplicate for review" }
+    },
+    {
+      "id": "flow_4_pause_on_zero_inventory",
+      "title": "FLOW_4: Pause Ads When Inventory <= 0",
+      "trigger": { "type": "shopify_webhook", "topic": "inventory_levels/update", "description": "Fires when inventory level changes" },
+      "condition": { "field": "available", "operator": "less_than_or_equal", "value": 0 },
+      "action": { "type": "http_request", "endpoint": "/api/pause-on-zero-inventory", "method": "POST", "body": "{{ inventory_level }}", "description": "Pause all Sellvia campaigns when stock hits zero" }
+    }
+  ]
+}
