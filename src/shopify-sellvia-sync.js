@@ -158,13 +158,13 @@ function isTransientError(error) {
 
 export async function requestWithRetry(url, init = {}, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const maxRetries = Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES);
   const backoffMs = options.backoffMs ?? DEFAULT_BACKOFF_MS;
   let rateLimited = 0;
   let attempts = 0;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
-    attempts = attempt;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    attempts = attempt + 1;
     const { signal, cleanup } = createAbortSignal(timeoutMs);
     try {
       const response = await fetch(url, { ...init, signal });
@@ -178,7 +178,7 @@ export async function requestWithRetry(url, init = {}, options = {}) {
         const error = new Error(`Transient HTTP ${response.status} from ${url}`);
         error.retryable = true;
         error.status = response.status;
-        await sleep(nextBackoffDelay(backoffMs, attempt));
+        await sleep(nextBackoffDelay(backoffMs, attempt + 1));
         continue;
       }
 
@@ -186,11 +186,11 @@ export async function requestWithRetry(url, init = {}, options = {}) {
     } catch (error) {
       cleanup();
       if (attempt >= maxRetries || !isTransientError(error)) {
-        error.attempts = attempt;
+        error.attempts = attempts;
         error.rateLimited = rateLimited;
         throw error;
       }
-      await sleep(nextBackoffDelay(backoffMs, attempt));
+      await sleep(nextBackoffDelay(backoffMs, attempt + 1));
     }
   }
 
@@ -528,11 +528,6 @@ async function applyCreate(config, action, counters) {
 }
 
 async function applyUpdate(config, action, counters, warnings) {
-  if (config.dryRun) {
-    counters.updated += 1;
-    return { simulated: true };
-  }
-
   const allowedUpdates = action.updates.filter((update) => {
     if (update.field === "price" && !config.priceWritesEnabled) {
       warnings.push(`Skipped price mutation for ${action.identityKey} because SYNC_ENABLE_PRICE_WRITES is false.`);
@@ -565,6 +560,11 @@ async function applyUpdate(config, action, counters, warnings) {
     return { skipped: true };
   }
 
+  if (config.dryRun) {
+    counters.updated += 1;
+    return { simulated: true, updates: allowedUpdates };
+  }
+
   const nonInventoryUpdates = allowedUpdates.filter((update) => update.field !== "inventory");
   const inventoryUpdate = allowedUpdates.find((update) => update.field === "inventory");
 
@@ -576,12 +576,12 @@ async function applyUpdate(config, action, counters, warnings) {
     const payload = {
       product: {
         id: action.target.id,
-        title: action.updates.find((update) => update.field === "title")?.to || action.target.title,
-        handle: action.updates.find((update) => update.field === "handle")?.to || action.target.handle,
+        title: nonInventoryUpdates.find((update) => update.field === "title")?.to || action.target.title,
+        handle: nonInventoryUpdates.find((update) => update.field === "handle")?.to || action.target.handle,
         variants: [
           {
             id: action.target.variant?.id,
-            price: action.updates.find((update) => update.field === "price")?.to || action.target.variant?.price,
+            price: nonInventoryUpdates.find((update) => update.field === "price")?.to || action.target.variant?.price,
           },
         ],
       },

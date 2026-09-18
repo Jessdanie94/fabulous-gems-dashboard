@@ -234,7 +234,10 @@ test("runSync produces dry-run summary and artifacts without writes", async () =
         skipped: 0,
         failed: 0,
         rateLimited: 0,
-        warnings: [],
+        warnings: [
+          "Skipped price mutation for external:sv-1 because SYNC_ENABLE_PRICE_WRITES is false.",
+          "Skipped inventory mutation for external:sv-1 because SYNC_ENABLE_INVENTORY_WRITES is false.",
+        ],
         errors: [],
       });
 
