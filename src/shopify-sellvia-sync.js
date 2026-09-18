@@ -147,6 +147,22 @@ function nextBackoffDelay(baseDelay, attempt) {
   return Math.min(baseDelay * 2 ** (attempt - 1), 8000);
 }
 
+function parseRetryAfterDelay(retryAfterHeader, fallbackDelay) {
+  if (!retryAfterHeader) return fallbackDelay;
+
+  const numericSeconds = Number(retryAfterHeader);
+  if (Number.isFinite(numericSeconds) && numericSeconds >= 0) {
+    return numericSeconds * 1000;
+  }
+
+  const retryAt = Date.parse(retryAfterHeader);
+  if (Number.isFinite(retryAt)) {
+    return Math.max(retryAt - Date.now(), fallbackDelay);
+  }
+
+  return fallbackDelay;
+}
+
 function isTransientError(error) {
   return Boolean(
     error?.name === "AbortError" ||
@@ -178,7 +194,12 @@ export async function requestWithRetry(url, init = {}, options = {}) {
         const error = new Error(`Transient HTTP ${response.status} from ${url}`);
         error.retryable = true;
         error.status = response.status;
-        await sleep(nextBackoffDelay(backoffMs, attempt + 1));
+        const fallbackDelay = nextBackoffDelay(backoffMs, attempt + 1);
+        const retryDelay =
+          response.status === 429
+            ? parseRetryAfterDelay(response.headers.get("retry-after"), fallbackDelay)
+            : fallbackDelay;
+        await sleep(retryDelay);
         continue;
       }
 
@@ -527,20 +548,26 @@ async function applyCreate(config, action, counters) {
   return response.json();
 }
 
-async function applyUpdate(config, action, counters, warnings) {
-  const allowedUpdates = action.updates.filter((update) => {
+function getExecutableUpdates(config, action, warnings) {
+  return action.updates.filter((update) => {
     if (update.field === "price" && !config.priceWritesEnabled) {
-      warnings.push(`Skipped price mutation for ${action.identityKey} because SYNC_ENABLE_PRICE_WRITES is false.`);
+      if (warnings) {
+        warnings.push(`Skipped price mutation for ${action.identityKey} because SYNC_ENABLE_PRICE_WRITES is false.`);
+      }
       return false;
     }
 
     if (update.field === "inventory") {
       if (!config.inventoryWritesEnabled) {
-        warnings.push(`Skipped inventory mutation for ${action.identityKey} because SYNC_ENABLE_INVENTORY_WRITES is false.`);
+        if (warnings) {
+          warnings.push(`Skipped inventory mutation for ${action.identityKey} because SYNC_ENABLE_INVENTORY_WRITES is false.`);
+        }
         return false;
       }
       if (!config.shopify.locationId) {
-        warnings.push(`Skipped inventory mutation for ${action.identityKey} because SHOPIFY_LOCATION_ID is not configured.`);
+        if (warnings) {
+          warnings.push(`Skipped inventory mutation for ${action.identityKey} because SHOPIFY_LOCATION_ID is not configured.`);
+        }
         return false;
       }
       if (!action.target.variant?.inventory_item_id) {
@@ -554,6 +581,10 @@ async function applyUpdate(config, action, counters, warnings) {
 
     return true;
   });
+}
+
+async function applyUpdate(config, action, counters, warnings) {
+  const allowedUpdates = getExecutableUpdates(config, action, warnings);
 
   if (allowedUpdates.length === 0) {
     counters.skipped += 1;
@@ -633,9 +664,14 @@ async function applyUpdate(config, action, counters, warnings) {
 }
 
 function enforceMutationSafety(config, plan) {
-  const actionableMutations = plan.filter((action) => action.action !== "skip");
+  const actionableMutations = plan.filter((action) => {
+    if (action.action === "skip") return false;
+    if (action.action === "create") return true;
+    return getExecutableUpdates(config, action).length > 0;
+  });
   const riskyMutations = actionableMutations.filter((action) =>
-    action.updates.some((update) => update.risk === "high"),
+    action.action === "create"
+      || getExecutableUpdates(config, action).some((update) => update.risk === "high"),
   );
   const totalMutations = actionableMutations.length;
 
