@@ -554,15 +554,21 @@ export async function runSync({ config, shopifyClient, sellviaClient }) {
       const desiredCompareAt = formatPrice(sourceProduct.compareAtPrice);
       const currentPrice = formatPrice(toNullableNumber(match.variant.price));
       const currentCompareAt = formatPrice(toNullableNumber(match.variant.compare_at_price));
-      if (desiredPrice !== undefined && (currentPrice !== desiredPrice || currentCompareAt !== desiredCompareAt)) {
+      const priceChanged = desiredPrice !== undefined && currentPrice !== desiredPrice;
+      const compareAtChanged = currentCompareAt !== desiredCompareAt;
+      if (priceChanged || compareAtChanged) {
+        const variantPatch = {};
+        if (priceChanged) {
+          variantPatch.price = desiredPrice;
+        }
+        if (compareAtChanged) {
+          variantPatch.compare_at_price = desiredCompareAt ?? null;
+        }
         if (config.dryRun) {
           count(report, 'updated');
           recordOperation(report, { status: 'updated', identity: `${identity}:price`, dryRun: true });
         } else {
-          await shopifyClient.updateVariant(match.variant.id, {
-            price: desiredPrice,
-            compare_at_price: desiredCompareAt,
-          });
+          await shopifyClient.updateVariant(match.variant.id, variantPatch);
           count(report, 'updated');
           recordOperation(report, { status: 'updated', identity: `${identity}:price`, dryRun: false });
         }

@@ -14,7 +14,7 @@ function parseLinkHeader(value) {
 }
 
 function shopifyUrl(config, pathname) {
-  return `https://${config.shopifyStoreDomain}/admin/api/2025-01${pathname}`;
+  return `https://${config.shopifyStoreDomain}/admin/api/${config.shopifyApiVersion || '2025-01'}${pathname}`;
 }
 
 export function createShopifyClient(config) {

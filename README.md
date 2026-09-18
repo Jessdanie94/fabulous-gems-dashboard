@@ -316,6 +316,7 @@ Use GitHub Actions **Secrets** for credentials and **Repository Variables** for 
 - `SELLVIA_API_BASE_URL` (defaults to `https://api.sellvia.com`)
 - `SELLVIA_ORDER_ENDPOINT` (read-only placeholder until order automation is explicitly supported)
 - `SHOPIFY_LOCATION_ID` (otherwise the first active Shopify location is used)
+- `SHOPIFY_ADMIN_API_VERSION` repository variable or local env override (defaults to `2025-01`)
 - `SYNC_FAILURE_WEBHOOK_URL` (optional failure notification target)
 
 #### Required repository variables for write-mode promotion

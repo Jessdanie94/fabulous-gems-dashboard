@@ -37,6 +37,7 @@ function buildConfig(env, cliOptions) {
     summaryPath: env.SYNC_SUMMARY_PATH,
     historyPath: env.SYNC_HISTORY_PATH,
     pageSize: Number(env.SYNC_PAGE_SIZE || 100),
+    shopifyApiVersion: env.SHOPIFY_ADMIN_API_VERSION || '2025-01',
     publishProducts: parseBoolean(env.SHOPIFY_SELLVIA_PUBLISH_PRODUCTS, false),
     enableOrderSync: parseBoolean(env.SHOPIFY_SELLVIA_ENABLE_ORDER_SYNC, false),
     shopifyStoreDomain: env.SHOPIFY_STORE_DOMAIN,

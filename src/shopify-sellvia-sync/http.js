@@ -107,6 +107,12 @@ export async function requestWithRetry(url, options = {}, runtime = {}) {
         );
       }
 
+      if (options.signal?.aborted) {
+        lastError =
+          options.signal.reason instanceof Error ? options.signal.reason : new Error('Request aborted');
+        break;
+      }
+
       const retryAfterMs = parseRetryAfter(response.headers?.get?.('retry-after'));
       const delayMs = retryAfterMs ?? Math.min(baseDelayMs * 2 ** (attempt - 1), 8_000);
       log(`Retrying ${url} after ${response.status} in ${delayMs}ms (attempt ${attempt}/${maxAttempts})`);

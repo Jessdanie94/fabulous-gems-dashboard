@@ -232,6 +232,52 @@ describe('runSync', () => {
     expect(shopifyClient.updateVariant).not.toHaveBeenCalled();
   });
 
+  it('updates compare-at price even when the source price is unchanged or missing', async () => {
+    const shopifyClient = {
+      listProducts: vi.fn().mockResolvedValue([
+        {
+          id: 102,
+          title: 'Pendant',
+          body_html: '',
+          vendor: 'Sellvia',
+          product_type: '',
+          handle: 'pendant-sv-21',
+          status: 'draft',
+          tags: 'sellvia:managed, sellvia:id:sv-21, sellvia:source:catalog',
+          variants: [
+            {
+              id: 202,
+              sku: 'SKU-21',
+              price: '15.00',
+              compare_at_price: '25.00',
+              inventory_item_id: 302,
+              inventory_quantity: 2,
+            },
+          ],
+        },
+      ]),
+      getPrimaryLocationId: vi.fn().mockResolvedValue('99'),
+      createProduct: vi.fn(),
+      updateProduct: vi.fn(),
+      updateVariant: vi.fn(),
+      setInventoryLevel: vi.fn(),
+    };
+    const sellviaClient = {
+      listCatalogProducts: vi.fn().mockResolvedValue([
+        { external_id: 'sv-21', sku: 'SKU-21', name: 'Pendant', compare_at_price: '19.00', inventory: 2 },
+      ]),
+    };
+
+    const report: any = await runSync({
+      config: { ...baseConfig, requestedDryRun: false, dryRun: false, writeApproved: true, scope: parseScope('price') },
+      shopifyClient,
+      sellviaClient,
+    });
+
+    expect(report.counts.updated).toBe(1);
+    expect(shopifyClient.updateVariant).toHaveBeenCalledWith(202, { compare_at_price: '19.00' });
+  });
+
   it('fails closed when configuration or required mapping inputs are missing', async () => {
     const report: any = await runSync({
       config: {
