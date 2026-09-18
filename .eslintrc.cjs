@@ -8,6 +8,11 @@ module.exports = {
     "prettier",
   ],
   globals: {
-    shopify: "readonly"
+    shopify: "readonly",
+  },
+  settings: {
+    jest: {
+      version: 29,
+    },
   },
 };

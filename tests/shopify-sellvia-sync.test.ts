@@ -1,0 +1,187 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  buildShopifyIndex,
+  normalizeSellviaProduct,
+  parseScope,
+  resolveShopifyMatch,
+  runSync,
+} from '../src/shopify-sellvia-sync/core.js';
+import { requestWithRetry } from '../src/shopify-sellvia-sync/http.js';
+
+describe('shopify-sellvia sync helpers', () => {
+  it('normalizes a Sellvia product into deterministic fields', () => {
+    const product = normalizeSellviaProduct({
+      external_id: 'sv-100',
+      sku: 'GEM-001',
+      name: 'Gem Necklace',
+      sale_price: '19.5',
+      inventory: '8',
+      tags: ['featured'],
+    });
+
+    expect(product.externalId).toBe('sv-100');
+    expect(product.sku).toBe('GEM-001');
+    expect(product.title).toBe('Gem Necklace');
+    expect(product.price).toBe(19.5);
+    expect(product.inventoryQuantity).toBe(8);
+    expect(product.handle).toContain('gem-necklace');
+  });
+
+  it('detects ambiguous Shopify identity conflicts', () => {
+    const index = buildShopifyIndex([
+      {
+        id: 1,
+        title: 'A',
+        tags: 'sellvia:id:sv-1',
+        variants: [{ id: 11, sku: 'SKU-1' }],
+      },
+      {
+        id: 2,
+        title: 'B',
+        tags: 'sellvia:id:sv-1',
+        variants: [{ id: 22, sku: 'SKU-2' }],
+      },
+    ]);
+
+    const match = resolveShopifyMatch(
+      normalizeSellviaProduct({ external_id: 'sv-1', sku: 'SKU-1', name: 'Ring', price: 12 }),
+      index,
+    );
+
+    expect(match.type).toBe('conflict');
+  });
+
+  it('retries transient 429 responses with retry-after backoff', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('rate limited', {
+          status: 429,
+          headers: { 'retry-after': '0.01' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      );
+    const sleepImpl = vi.fn().mockResolvedValue(undefined);
+
+    const response = await requestWithRetry('https://example.test/items', {}, { fetchImpl, sleepImpl, maxAttempts: 2 });
+
+    expect(response.status).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(sleepImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runSync', () => {
+  const baseConfig = {
+    requestedDryRun: true,
+    dryRun: true,
+    writeApproved: false,
+    publishProducts: false,
+    enableOrderSync: false,
+    scope: parseScope('catalog,inventory,price'),
+    shopifyStoreDomain: 'example.myshopify.com',
+    shopifyAccessToken: 'token',
+    shopifyLocationId: '99',
+    sellviaBaseUrl: 'https://api.sellvia.test',
+    sellviaAccessToken: 'sv-token',
+    sellviaCatalogEndpoint: '/catalog',
+    sellviaOrderEndpoint: '',
+    catalogFixturePath: '',
+    pageSize: 100,
+    requestRuntime: {},
+  };
+
+  it('records planned creates in dry-run mode without writing', async () => {
+    const shopifyClient = {
+      listProducts: vi.fn().mockResolvedValue([]),
+      getPrimaryLocationId: vi.fn().mockResolvedValue('99'),
+      createProduct: vi.fn(),
+      updateProduct: vi.fn(),
+      updateVariant: vi.fn(),
+      setInventoryLevel: vi.fn(),
+    };
+    const sellviaClient = {
+      listCatalogProducts: vi.fn().mockResolvedValue([
+        { external_id: 'sv-10', sku: 'SKU-10', name: 'Bracelet', sale_price: '29.99', inventory: 5 },
+      ]),
+    };
+
+    const report: any = await runSync({ config: baseConfig, shopifyClient, sellviaClient });
+
+    expect(report.status).toBe('success');
+    expect(report.counts.created).toBe(1);
+    expect(report.operations.some((entry: any) => entry.dryRun)).toBe(true);
+    expect(shopifyClient.createProduct).not.toHaveBeenCalled();
+    expect(shopifyClient.updateProduct).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent across repeated write runs after initial create', async () => {
+    const products: any[] = [];
+    const shopifyClient = {
+      listProducts: vi.fn().mockImplementation(async () => products),
+      getPrimaryLocationId: vi.fn().mockResolvedValue('99'),
+      createProduct: vi.fn().mockImplementation(async (product) => {
+        const created = {
+          id: 100,
+          title: product.title,
+          body_html: product.body_html,
+          vendor: product.vendor,
+          product_type: product.product_type,
+          handle: product.handle,
+          status: product.status,
+          tags: product.tags,
+          variants: [
+            {
+              id: 200,
+              sku: product.variants[0].sku,
+              price: product.variants[0].price,
+              compare_at_price: product.variants[0].compare_at_price,
+              inventory_item_id: 300,
+              inventory_quantity: 0,
+            },
+          ],
+        };
+        products.splice(0, products.length, created);
+        return created;
+      }),
+      updateProduct: vi.fn(),
+      updateVariant: vi.fn(),
+      setInventoryLevel: vi.fn().mockImplementation(async (_inventoryItemId, _locationId, available) => {
+        products[0].variants[0].inventory_quantity = available;
+      }),
+    };
+    const sellviaClient = {
+      listCatalogProducts: vi.fn().mockResolvedValue([
+        { external_id: 'sv-20', sku: 'SKU-20', name: 'Pendant', sale_price: '15.00', inventory: 3 },
+      ]),
+    };
+
+    const writeConfig = { ...baseConfig, requestedDryRun: false, dryRun: false, writeApproved: true };
+    const firstReport: any = await runSync({ config: writeConfig, shopifyClient, sellviaClient });
+    const secondReport: any = await runSync({ config: writeConfig, shopifyClient, sellviaClient });
+
+    expect(firstReport.counts.created).toBe(1);
+    expect(shopifyClient.createProduct).toHaveBeenCalledTimes(1);
+    expect(secondReport.counts.created).toBe(0);
+    expect(secondReport.counts.updated).toBe(0);
+    expect(secondReport.counts.skipped).toBeGreaterThan(0);
+    expect(secondReport.counts.failed).toBe(0);
+  });
+
+  it('fails closed when configuration or required mapping inputs are missing', async () => {
+    const report: any = await runSync({
+      config: {
+        ...baseConfig,
+        sellviaCatalogEndpoint: '',
+        catalogFixturePath: '',
+      },
+      shopifyClient: {} as any,
+      sellviaClient: {} as any,
+    });
+
+    expect(report.status).toBe('failed');
+    expect(report.blockers).toContain('Missing SELLVIA_CATALOG_ENDPOINT (or SELLVIA_CATALOG_FIXTURE_PATH for local validation)');
+  });
+});

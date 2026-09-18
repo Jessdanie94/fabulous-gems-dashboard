@@ -2,79 +2,172 @@ name: Shopify + Sellvia Sync
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Keep write operations disabled for this run
+        required: true
+        default: true
+        type: boolean
+      operation_scope:
+        description: Sync scope to execute
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - catalog
+          - inventory
+          - price
+          - orders
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: '*/30 * * * *'
+
+permissions:
+  contents: read
 
 concurrency:
   group: shopify-sellvia-sync
   cancel-in-progress: false
 
+env:
+  NODE_VERSION: '22.12.0'
+
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      SYNC_REPORT_DIR: ${{ runner.temp }}/shopify-sellvia-sync
+      SYNC_REPORT_PATH: ${{ runner.temp }}/shopify-sellvia-sync/report.json
+      SYNC_SUMMARY_PATH: ${{ runner.temp }}/shopify-sellvia-sync/summary.md
+      SYNC_HISTORY_PATH: ${{ runner.temp }}/shopify-sellvia-sync/history.jsonl
+      SYNC_SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.operation_scope || 'all' }}
+      SYNC_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'true' }}
+      SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+      SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN || secrets.SHOPIFY_API_TOKEN }}
+      SHOPIFY_API_TOKEN: ${{ secrets.SHOPIFY_API_TOKEN || secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
+      SELLVIA_MASTER_KEY: ${{ secrets.SELLVIA_MASTER_KEY || secrets.SELLVIA_API_KEY }}
+      SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY || secrets.SELLVIA_MASTER_KEY }}
+      SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
+      SELLVIA_CATALOG_ENDPOINT: ${{ secrets.SELLVIA_CATALOG_ENDPOINT }}
+      SELLVIA_ORDER_ENDPOINT: ${{ secrets.SELLVIA_ORDER_ENDPOINT }}
+      SHOPIFY_LOCATION_ID: ${{ secrets.SHOPIFY_LOCATION_ID }}
+      SHOPIFY_SELLVIA_WRITE_APPROVED: ${{ vars.SHOPIFY_SELLVIA_WRITE_APPROVED || 'false' }}
+      SHOPIFY_SELLVIA_PUBLISH_PRODUCTS: ${{ vars.SHOPIFY_SELLVIA_PUBLISH_PRODUCTS || 'false' }}
+      SHOPIFY_SELLVIA_ENABLE_ORDER_SYNC: ${{ vars.SHOPIFY_SELLVIA_ENABLE_ORDER_SYNC || 'false' }}
+      SYNC_MAX_RUNTIME_MS: '900000'
+      SYNC_REQUEST_TIMEOUT_MS: '15000'
+      SYNC_MAX_ATTEMPTS: '4'
+      SYNC_RETRY_DELAY_MS: '1000'
+      SYNC_FAILURE_WEBHOOK_URL: ${{ secrets.SYNC_FAILURE_WEBHOOK_URL }}
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Preflight - validate required secrets
-        env:
-          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
-          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
-          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
-          SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
+      - name: Validate sync configuration
+        shell: bash
         run: |
+          set -euo pipefail
+          mkdir -p "$SYNC_REPORT_DIR"
+
           missing=0
 
-          check_required () {
-            key="$1"
-            val="$2"
-            if [ -z "$val" ]; then
-              echo "::error::Missing required secret: $key"
+          required_vars=(
+            SHOPIFY_STORE_DOMAIN
+            SHOPIFY_ADMIN_ACCESS_TOKEN
+            SELLVIA_MASTER_KEY
+          )
+
+          for key in "${required_vars[@]}"; do
+            if [ -z "${!key:-}" ]; then
+              echo "::error::Missing required secret or mapped fallback: $key"
               missing=1
             else
-              echo "::notice::$key is set"
+              echo "::notice::$key is configured"
             fi
-          }
+          done
 
-          check_optional () {
-            key="$1"
-            val="$2"
-            if [ -z "$val" ]; then
-              echo "::notice::Optional secret not set: $key"
-            else
-              echo "::notice::$key is set"
-            fi
-          }
+          if [ "$SYNC_SCOPE" != "orders" ] && [ -z "${SELLVIA_CATALOG_ENDPOINT:-}" ]; then
+            echo "::error::Missing required secret: SELLVIA_CATALOG_ENDPOINT"
+            missing=1
+          fi
 
-          check_required "SHOPIFY_STORE_DOMAIN" "$SHOPIFY_STORE_DOMAIN"
-          check_required "SHOPIFY_ADMIN_ACCESS_TOKEN" "$SHOPIFY_ADMIN_ACCESS_TOKEN"
-          check_required "SELLVIA_API_KEY" "$SELLVIA_API_KEY"
-          check_optional "SELLVIA_API_BASE_URL" "$SELLVIA_API_BASE_URL"
+          if [ "$SYNC_DRY_RUN" != "true" ] && [ "${SHOPIFY_SELLVIA_WRITE_APPROVED:-false}" != "true" ]; then
+            echo "::warning::Write mode requested without explicit approval variable; the sync command will enforce dry-run."
+          fi
 
           if [ "$missing" -ne 0 ]; then
-            echo "::error::Preflight failed due to missing required secrets."
             exit 1
           fi
 
-      - name: Set up Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+        run: npm install --no-audit --no-fund
 
-      - name: Run Shopify/Sellvia sync
-        env:
-          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
-          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
-          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
-          SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
+      - name: Run Shopify + Sellvia sync
+        id: run_sync
+        continue-on-error: true
+        run: npm run sync:shopify-sellvia -- --scope=${SYNC_SCOPE} --dry-run=${SYNC_DRY_RUN}
+
+      - name: Publish run summary
+        if: always()
+        shell: bash
         run: |
-          echo "Starting sync..."
-          npm run sync:shopify || echo "sync:shopify not yet configured"
-          npm run sync:sellvia || echo "sync:sellvia not yet configured"
-          echo "Sync step complete."
+          if [ -f "$SYNC_SUMMARY_PATH" ]; then
+            cat "$SYNC_SUMMARY_PATH" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# Shopify + Sellvia Sync" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Sync summary file was not generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload sync audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shopify-sellvia-sync-${{ github.run_id }}
+          path: ${{ env.SYNC_REPORT_DIR }}
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Notify failure webhook
+        if: steps.run_sync.outcome == 'failure' && env.SYNC_FAILURE_WEBHOOK_URL != ''
+        env:
+          WEBHOOK_URL: ${{ env.SYNC_FAILURE_WEBHOOK_URL }}
+        run: |
+          node --input-type=module <<'EOF'
+          import fs from 'node:fs';
+          const reportPath = process.env.SYNC_REPORT_PATH;
+          const report = fs.existsSync(reportPath)
+            ? JSON.parse(fs.readFileSync(reportPath, 'utf8'))
+            : { status: 'failed', counts: { created: 0, updated: 0, skipped: 0, failed: 1 }, blockers: ['No report file generated'], warnings: [] };
+          const payload = {
+            text: `Shopify + Sellvia sync failed for ${process.env.GITHUB_REPOSITORY}`,
+            repository: process.env.GITHUB_REPOSITORY,
+            runId: process.env.GITHUB_RUN_ID,
+            status: report.status,
+            scope: report.scope,
+            effectiveDryRun: report.effectiveDryRun,
+            counts: report.counts,
+            blockers: report.blockers,
+            warnings: report.warnings,
+          };
+          const response = await fetch(process.env.WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) {
+            throw new Error(`Webhook notification failed with status ${response.status}`);
+          }
+          EOF
+
+      - name: Mark workflow failed if sync failed
+        if: steps.run_sync.outcome == 'failure'
+        run: exit 1

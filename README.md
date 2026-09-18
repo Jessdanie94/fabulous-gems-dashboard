@@ -272,3 +272,127 @@ This project is part of the Shopify App ecosystem.
 **App URL:** https://fabulousgemsparlor-store.onrender.com  
 **Store:** fabulousgemsparlor.store  
 **Last Updated:** 2026-09-10
+
+## Shopify + Sellvia Sync Automation
+
+This repository now includes an in-repo sync runner at `/home/runner/work/fabulous-gems-dashboard/fabulous-gems-dashboard/src/shopify-sellvia-sync/cli.js` plus the GitHub Actions workflow `/home/runner/work/fabulous-gems-dashboard/fabulous-gems-dashboard/.github/workflows/shopify-sellvia-sync.yml`.
+
+### Architecture and data flow
+
+1. GitHub Actions triggers the sync every 30 minutes or on `workflow_dispatch`.
+2. The workflow validates that required secrets exist without printing their values.
+3. The sync runner loads Sellvia catalog data from `SELLVIA_CATALOG_ENDPOINT` using `SELLVIA_API_KEY` or `SELLVIA_MASTER_KEY`.
+4. The runner fetches Shopify products with the Admin REST API and builds a deterministic index from:
+   - `sellvia:id:<externalId>` product tags (preferred)
+   - variant SKU fallback when the match is unique
+5. Catalog writes create draft Shopify products by default, tagged with `sellvia:managed`, `sellvia:source:catalog`, and `sellvia:id:<externalId>`.
+6. Follow-up price and inventory updates are idempotent and only run when a concrete difference is detected.
+7. Every run writes a sanitized JSON report, a markdown summary, and a JSONL history entry for troubleshooting.
+
+### Conflict policy
+
+The sync fails closed for ambiguous mappings. A product is skipped and counted as failed when:
+
+- multiple Shopify products share the same `sellvia:id:<externalId>` tag;
+- multiple Shopify variants share the same SKU;
+- Sellvia id and Shopify SKU resolve to different Shopify products; or
+- a matched Shopify product does not have a deterministic variant to update.
+
+No destructive deletes are performed. No existing Shopify products are removed. Order writes remain disabled by default.
+
+### Required secrets and variables
+
+Use GitHub Actions **Secrets** for credentials and **Repository Variables** for write approvals.
+
+#### Required secrets
+
+- `SHOPIFY_STORE_DOMAIN`
+- `SHOPIFY_ADMIN_ACCESS_TOKEN` **or** `SHOPIFY_API_TOKEN`
+- `SELLVIA_API_KEY` **or** `SELLVIA_MASTER_KEY`
+- `SELLVIA_CATALOG_ENDPOINT`
+
+#### Optional secrets
+
+- `SELLVIA_API_BASE_URL` (defaults to `https://api.sellvia.com`)
+- `SELLVIA_ORDER_ENDPOINT` (read-only placeholder until order automation is explicitly supported)
+- `SHOPIFY_LOCATION_ID` (otherwise the first active Shopify location is used)
+- `SYNC_FAILURE_WEBHOOK_URL` (optional failure notification target)
+
+#### Required repository variables for write-mode promotion
+
+- `SHOPIFY_SELLVIA_WRITE_APPROVED=false` by default
+
+#### Optional repository variables
+
+- `SHOPIFY_SELLVIA_PUBLISH_PRODUCTS=false` keeps created products in `draft`
+- `SHOPIFY_SELLVIA_ENABLE_ORDER_SYNC=false` keeps order automation blocked
+
+### Workflow inputs
+
+Manual runs expose:
+
+- `dry_run` — defaults to `true`
+- `operation_scope` — one of `all`, `catalog`, `inventory`, `price`, `orders`
+
+Scheduled runs always default to dry-run unless a maintainer both:
+
+1. sets `SHOPIFY_SELLVIA_WRITE_APPROVED=true`, and
+2. manually dispatches the workflow with `dry_run=false`.
+
+If `dry_run=false` is requested without that explicit approval variable, the runner automatically enforces dry-run and records the protection in the run summary.
+
+### Exact setup
+
+1. Add the required secrets in **Settings → Secrets and variables → Actions**.
+2. Add `SHOPIFY_SELLVIA_WRITE_APPROVED=false` as a repository variable.
+3. Confirm that `SELLVIA_CATALOG_ENDPOINT` returns catalog records containing at least:
+   - a stable external id (`externalId`, `external_id`, `sellviaId`, or `id`)
+   - a product title (`title` or `name`)
+   - a SKU when variant-level matching is required
+   - optional `price`, `compare_at_price`, `inventory`, `images`, and `tags`
+4. Run a manual dry-run and inspect the GitHub step summary plus artifact.
+5. Only after reviewing the dry-run report, set `SHOPIFY_SELLVIA_WRITE_APPROVED=true` and manually rerun with `dry_run=false`.
+
+### Local validation
+
+```bash
+npm install
+npm run lint
+npm run typecheck
+npm run test
+npm run sync:shopify-sellvia -- --scope=all --dry-run=true
+```
+
+For local dry-run validation without live Sellvia credentials, you can point `SELLVIA_CATALOG_FIXTURE_PATH` at a local JSON fixture file. You can also set `SHOPIFY_PRODUCTS_FIXTURE_PATH` to a local Shopify product fixture for a fully offline dry-run. Both are optional and intended only for safe validation.
+
+### Monitoring, audit, and alerting
+
+- Each run writes a step summary with fetched / created / updated / skipped / failed counts.
+- Each run uploads a sanitized artifact containing:
+  - `report.json`
+  - `summary.md`
+  - `history.jsonl`
+- Optional failure notification is sent to `SYNC_FAILURE_WEBHOOK_URL` with counts and blockers only. Credentials and customer/order payloads are never logged.
+
+### Retries, rate limits, and timeouts
+
+- API requests use bounded retries with exponential backoff.
+- `Retry-After` headers are honored for transient `429` responses.
+- Shopify REST call-limit headers trigger a short buffer delay near exhaustion.
+- Individual requests time out via `SYNC_REQUEST_TIMEOUT_MS`.
+- The overall run is bounded by `SYNC_MAX_RUNTIME_MS` and the workflow job timeout.
+
+### Rollback and recovery
+
+- Leave `SHOPIFY_SELLVIA_WRITE_APPROVED=false` to force dry-run.
+- Disable the workflow schedule or cancel queued runs if Sellvia data quality is suspect.
+- Re-run a manual dry-run after updating endpoint mappings or credentials.
+- Because deletes are disabled and new products default to `draft`, rollback is limited to reviewing and reverting the specific changed Shopify products or prices.
+
+### Known blockers and API assumptions
+
+- Sellvia catalog endpoints are account-specific. The sync intentionally fails closed until `SELLVIA_CATALOG_ENDPOINT` is explicitly configured.
+- Order synchronization is not advertised as production-ready here because this repository does not yet contain a verified Sellvia-to-Shopify order contract or safe irreversible-order policy.
+- Catalog matching assumes either a stable Sellvia external id or a unique Shopify SKU.
+- Inventory synchronization targets one Shopify location per run.
+
