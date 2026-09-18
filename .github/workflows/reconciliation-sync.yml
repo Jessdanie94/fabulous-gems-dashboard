@@ -1,0 +1,204 @@
+name: Payments Reconciliation Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Reconciliation source scope
+        required: false
+        default: shopify-only
+        type: choice
+        options:
+          - shopify-only
+          - shopify-sellvia
+      dry_run:
+        description: Run in read-only dry-run mode
+        required: false
+        default: true
+        type: boolean
+      start_date:
+        description: Optional start date (YYYY-MM-DD)
+        required: false
+        type: string
+      end_date:
+        description: Optional end date (YYYY-MM-DD)
+        required: false
+        type: string
+      match_window_days:
+        description: Optional fallback date matching window in days
+        required: false
+        default: "3"
+        type: string
+  schedule:
+    - cron: "0 9 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: payments-reconciliation-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RECON_SOURCE: ${{ github.event_name == 'schedule' && 'shopify-only' || inputs.source || 'shopify-only' }}
+      RECON_DRY_RUN: ${{ github.event_name == 'schedule' && 'true' || inputs.dry_run && 'true' || 'false' }}
+      RECON_START_DATE: ${{ inputs.start_date || '' }}
+      RECON_END_DATE: ${{ inputs.end_date || '' }}
+      RECON_MATCH_WINDOW_DAYS: ${{ inputs.match_window_days || '3' }}
+      RECON_ARTIFACTS_DIR: artifacts/reconciliation-sync
+      SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+      SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
+      SHOPIFY_API_TOKEN: ${{ secrets.SHOPIFY_API_TOKEN }}
+      SELLVIA_RECONCILIATION_URL: ${{ secrets.SELLVIA_RECONCILIATION_URL }}
+      SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
+      SELLVIA_MASTER_KEY: ${{ secrets.SELLVIA_MASTER_KEY }}
+      RECONCILIATION_FAILURE_WEBHOOK_URL: ${{ secrets.RECONCILIATION_FAILURE_WEBHOOK_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Preflight - validate required config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          missing=0
+
+          check_required () {
+            key="$1"
+            value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::Missing required configuration: $key"
+              missing=1
+            else
+              echo "::notice::$key is set"
+            fi
+          }
+
+          check_optional () {
+            key="$1"
+            value="$2"
+            if [ -z "$value" ]; then
+              echo "::notice::Optional configuration not set: $key"
+            else
+              echo "::notice::$key is set"
+            fi
+          }
+
+          check_required "SHOPIFY_STORE_DOMAIN" "$SHOPIFY_STORE_DOMAIN"
+          check_required "SHOPIFY_ADMIN_ACCESS_TOKEN or SHOPIFY_API_TOKEN" "${SHOPIFY_ADMIN_ACCESS_TOKEN:-$SHOPIFY_API_TOKEN}"
+          check_optional "RECON_START_DATE" "$RECON_START_DATE"
+          check_optional "RECON_END_DATE" "$RECON_END_DATE"
+
+          if [ "$RECON_SOURCE" = "shopify-sellvia" ]; then
+            check_required "SELLVIA_RECONCILIATION_URL" "$SELLVIA_RECONCILIATION_URL"
+            check_required "SELLVIA_API_KEY or SELLVIA_MASTER_KEY" "${SELLVIA_API_KEY:-$SELLVIA_MASTER_KEY}"
+          else
+            check_optional "SELLVIA_RECONCILIATION_URL" "$SELLVIA_RECONCILIATION_URL"
+            check_optional "SELLVIA_API_KEY / SELLVIA_MASTER_KEY" "${SELLVIA_API_KEY:-$SELLVIA_MASTER_KEY}"
+          fi
+
+          check_optional "RECONCILIATION_FAILURE_WEBHOOK_URL" "$RECONCILIATION_FAILURE_WEBHOOK_URL"
+
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Preflight failed due to missing required configuration."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable
+          else
+            npm install
+          fi
+
+      - name: Run payout reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          args=("--source" "$RECON_SOURCE" "--dry-run" "$RECON_DRY_RUN" "--match-window-days" "$RECON_MATCH_WINDOW_DAYS")
+
+          if [ -n "$RECON_START_DATE" ]; then
+            args+=("--start-date" "$RECON_START_DATE")
+          fi
+
+          if [ -n "$RECON_END_DATE" ]; then
+            args+=("--end-date" "$RECON_END_DATE")
+          fi
+
+          npm run reconcile:payouts -- "${args[@]}"
+
+      - name: Publish job summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RECON_ARTIFACTS_DIR/summary.md" ]; then
+            cat "$RECON_ARTIFACTS_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload reconciliation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: payments-reconciliation-artifacts
+          path: |
+            artifacts/reconciliation-sync/summary.json
+            artifacts/reconciliation-sync/details.json
+            artifacts/reconciliation-sync/matches.csv
+            artifacts/reconciliation-sync/summary.md
+            artifacts/reconciliation-sync/history.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Notify webhook on failure
+        if: failure() && env.RECONCILIATION_FAILURE_WEBHOOK_URL != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          payload_file="$(mktemp)"
+          if [ -f "$RECON_ARTIFACTS_DIR/summary.json" ]; then
+            node -e '
+              const fs = require("fs");
+              const summary = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              const payload = {
+                status: "failure",
+                source: summary.source,
+                dryRun: summary.dryRun,
+                dateWindow: summary.dateWindow,
+                matches: summary.matches,
+                variance: summary.totals?.variance ?? null,
+                errors: Array.isArray(summary.errors) ? summary.errors.slice(0, 5) : []
+              };
+              fs.writeFileSync(process.argv[2], JSON.stringify(payload));
+            ' "$RECON_ARTIFACTS_DIR/summary.json" "$payload_file"
+          else
+            printf '{"status":"failure","message":"reconciliation failed before summary generation"}' > "$payload_file"
+          fi
+
+          curl --fail --silent --show-error \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            --data @"$payload_file" \
+            "$RECONCILIATION_FAILURE_WEBHOOK_URL"

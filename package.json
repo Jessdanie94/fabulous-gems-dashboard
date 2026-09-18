@@ -16,7 +16,9 @@
     "shopify": "shopify",
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
-    "vite": "vite"
+    "vite": "vite",
+    "test": "node --test tests/reconcile-payouts.test.js",
+    "reconcile:payouts": "node reconcile-payouts.js"
   },
   "type": "module",
   "engines": {

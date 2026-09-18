@@ -16,14 +16,6 @@ interface ShopifyPayout {
   issued_at: string;
 }
 
-interface PayoutResponse {
-  payouts: {
-    edges: Array<{
-      node: ShopifyPayout;
-    }>;
-  };
-}
-
 /**
  * Get pending balance and recent payouts from Shopify Payments
  */

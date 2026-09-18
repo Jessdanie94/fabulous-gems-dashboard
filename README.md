@@ -240,11 +240,83 @@ npm run dev               # Start development server
 npm run start             # Start production server
 npm run setup             # Setup database (Prisma)
 npm run lint              # Run ESLint
+npm run test              # Run Node test suite
+npm run reconcile:payouts # Run read-only payout reconciliation
 npm run shopify           # Shopify CLI commands
 npm run prisma            # Prisma CLI commands
 npm run graphql-codegen   # Generate GraphQL types
 npm run vite              # Vite CLI commands
 ```
+
+## Payments Reconciliation Sync (Read-only)
+
+This repository includes a dedicated workflow at `.github/workflows/reconciliation-sync.yml` named **Payments Reconciliation Sync** for reporting/reconciliation only.
+
+### Safety boundary
+
+- Read-only reconciliation only (no payout modifications, no transfers, no bank connectivity).
+- Never store bank account or routing details in `.env`, GitHub Secrets, logs, artifacts, or repository files.
+- External calls are read-only to Shopify payouts/orders/transactions and optional Sellvia reconciliation data.
+
+### Schedule and triggers
+
+- `schedule`: `0 9 * * *` (daily at 09:00 UTC)
+- `workflow_dispatch` inputs:
+  - `source`: `shopify-only` or `shopify-sellvia`
+  - `dry_run`: boolean (default `true`)
+  - `start_date`: optional `YYYY-MM-DD`
+  - `end_date`: optional `YYYY-MM-DD`
+  - `match_window_days`: optional fallback date window for amount-based matching
+
+### Required GitHub Actions secrets
+
+Always required:
+- `SHOPIFY_STORE_DOMAIN`
+- `SHOPIFY_ADMIN_ACCESS_TOKEN` (or legacy `SHOPIFY_API_TOKEN`)
+
+Required only when `source=shopify-sellvia`:
+- `SELLVIA_RECONCILIATION_URL`
+- `SELLVIA_API_KEY` (or `SELLVIA_MASTER_KEY`)
+
+Optional:
+- `RECONCILIATION_FAILURE_WEBHOOK_URL` (failure-only safe summary payload)
+
+### Shopify access/scopes
+
+Minimum Shopify app/token access for reconciliation:
+- `read_finances` (payout reporting)
+- `read_orders` (order/transaction reconciliation)
+
+### Matching policy
+
+Records are matched in this order:
+1. Exact provider/transaction reference (confirmed)
+2. Stable order identifier (`orderId` / order name) (**review-needed**)
+3. Constrained amount + currency + date-window match (**review-needed**)
+
+Non-exact matches are never silently treated as confirmed.
+
+### Output artifacts (30-day retention)
+
+- `summary.json`
+- `details.json`
+- `matches.csv`
+- `summary.md`
+- `history.json` (run history audit trail)
+
+Artifacts include totals and reconciliation state: gross sales, refunds, fees, net payout, expected amount, actual payout, variance, matched/unmatched counts, date window, currency context, and errors. Values that are not supported by source data are marked as `unavailable`.
+
+### Limitations and manual review/rollback
+
+- Shopify-only mode does not compute Sellvia expected totals.
+- Variance is only calculated when expected and actual values are available in one currency.
+- Review all `review-needed` and unmatched records before acting on reports.
+- To halt execution, disable the workflow or run manual dispatch with `dry_run=true`.
+- To recover from bad source mappings, correct upstream identifiers and rerun in dry-run mode before relying on totals.
+
+### Note on open PR #24 reuse/conflicts
+
+Open PR #24 (`copilot/integrate-shopify-sellvia-autonomy`) contains reusable retry/env-alias patterns used as reference. This reconciliation integration is isolated to new reconciliation files/workflow and does not depend on merging #24 first.
 
 ## Resources
 
