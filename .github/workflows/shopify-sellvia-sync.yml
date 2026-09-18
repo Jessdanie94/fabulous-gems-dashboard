@@ -51,8 +51,8 @@ jobs:
           }
 
           check_required "SHOPIFY_STORE_DOMAIN" "$SHOPIFY_STORE_DOMAIN"
-          check_required "SHOPIFY_ADMIN_ACCESS_TOKEN / SHOPIFY_API_TOKEN" "$SHOPIFY_API_TOKEN"
-          check_required "SELLVIA_API_KEY / SELLVIA_MASTER_KEY" "$SELLVIA_MASTER_KEY"
+          check_required "SHOPIFY_ADMIN_ACCESS_TOKEN / SHOPIFY_API_TOKEN" "$SHOPIFY_ADMIN_ACCESS_TOKEN"
+          check_required "SELLVIA_API_KEY / SELLVIA_MASTER_KEY" "$SELLVIA_API_KEY"
           check_optional "SELLVIA_API_BASE_URL" "$SELLVIA_API_BASE_URL"
 
           if [ "$missing" -ne 0 ]; then
