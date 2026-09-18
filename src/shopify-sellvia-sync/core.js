@@ -84,6 +84,10 @@ function normalizeTags(value) {
   return [];
 }
 
+function normalizeTagSet(value) {
+  return [...new Set(normalizeTags(value))].sort();
+}
+
 function normalizeImages(value) {
   if (!Array.isArray(value)) return [];
   return value
@@ -294,7 +298,7 @@ function formatPrice(value) {
 
 export function planCatalogUpdate(sourceProduct, shopifyProduct, shopifyVariant, config) {
   const changes = { product: {}, variant: {} };
-  const existingTags = productTags(shopifyProduct);
+  const existingTags = normalizeTagSet(productTags(shopifyProduct));
   const desiredTags = mergeManagedTags(existingTags, sourceProduct);
 
   if (shopifyProduct.title !== sourceProduct.title) changes.product.title = sourceProduct.title;
@@ -306,7 +310,7 @@ export function planCatalogUpdate(sourceProduct, shopifyProduct, shopifyVariant,
     changes.product.product_type = sourceProduct.productType || '';
   }
   if ((shopifyProduct.handle || '') !== sourceProduct.handle) changes.product.handle = sourceProduct.handle;
-  if (existingTags.sort().join(',') !== desiredTags.join(',')) changes.product.tags = desiredTags.join(', ');
+  if (existingTags.join(',') !== desiredTags.join(',')) changes.product.tags = desiredTags.join(', ');
   if (config.publishProducts && sourceProduct.status && shopifyProduct.status !== sourceProduct.status) {
     changes.product.status = sourceProduct.status;
   }

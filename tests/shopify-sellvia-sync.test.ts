@@ -184,6 +184,54 @@ describe('runSync', () => {
     expect(secondReport.counts.failed).toBe(0);
   });
 
+  it('does not emit false catalog updates when Shopify tags are reordered or duplicated', async () => {
+    const shopifyClient = {
+      listProducts: vi.fn().mockResolvedValue([
+        {
+          id: 101,
+          title: 'Pendant',
+          body_html: '',
+          vendor: 'Sellvia',
+          product_type: '',
+          handle: 'pendant-sv-20',
+          status: 'draft',
+          tags: 'extra, sellvia:managed, sellvia:id:sv-20, extra, sellvia:source:catalog',
+          variants: [
+            {
+              id: 201,
+              sku: 'SKU-20',
+              price: '15.00',
+              compare_at_price: undefined,
+              inventory_item_id: 301,
+              inventory_quantity: 3,
+            },
+          ],
+        },
+      ]),
+      getPrimaryLocationId: vi.fn().mockResolvedValue('99'),
+      createProduct: vi.fn(),
+      updateProduct: vi.fn(),
+      updateVariant: vi.fn(),
+      setInventoryLevel: vi.fn(),
+    };
+    const sellviaClient = {
+      listCatalogProducts: vi.fn().mockResolvedValue([
+        { external_id: 'sv-20', sku: 'SKU-20', name: 'Pendant', sale_price: '15.00', inventory: 3, tags: ['extra'] },
+      ]),
+    };
+
+    const report: any = await runSync({
+      config: { ...baseConfig, scope: parseScope('catalog,inventory,price') },
+      shopifyClient,
+      sellviaClient,
+    });
+
+    expect(report.counts.updated).toBe(0);
+    expect(report.counts.failed).toBe(0);
+    expect(shopifyClient.updateProduct).not.toHaveBeenCalled();
+    expect(shopifyClient.updateVariant).not.toHaveBeenCalled();
+  });
+
   it('fails closed when configuration or required mapping inputs are missing', async () => {
     const report: any = await runSync({
       config: {

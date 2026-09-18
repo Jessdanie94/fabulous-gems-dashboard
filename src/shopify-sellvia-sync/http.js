@@ -59,10 +59,9 @@ function isRetryableStatus(status) {
   return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
 
-function isExplicitAbort(error, options, deadlineAt) {
+function isExplicitAbort(error, options) {
   if (options.signal?.aborted) return true;
-  if (deadlineAt && Date.now() >= deadlineAt) return true;
-  return error instanceof Error && error.name === 'AbortError';
+  return Boolean(options.signal) && error instanceof Error && error.name === 'AbortError';
 }
 
 export async function requestWithRetry(url, options = {}, runtime = {}) {
@@ -117,7 +116,7 @@ export async function requestWithRetry(url, options = {}, runtime = {}) {
       if (error instanceof FatalRequestError) {
         break;
       }
-      if (isExplicitAbort(error, options, deadlineAt)) {
+      if (isExplicitAbort(error, options)) {
         break;
       }
       if (attempt === maxAttempts) {
