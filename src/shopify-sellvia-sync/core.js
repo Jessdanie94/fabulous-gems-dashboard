@@ -362,7 +362,9 @@ export function validateConfig(config) {
     if (!config.shopifyProductsFixturePath && !config.shopifyAccessToken) {
       blockers.push('Missing Shopify admin token (SHOPIFY_ADMIN_ACCESS_TOKEN or SHOPIFY_API_TOKEN)');
     }
-    if (!config.sellviaAccessToken) blockers.push('Missing Sellvia token (SELLVIA_API_KEY or SELLVIA_MASTER_KEY)');
+    if (!config.catalogFixturePath && !config.sellviaAccessToken) {
+      blockers.push('Missing Sellvia token (SELLVIA_API_KEY or SELLVIA_MASTER_KEY)');
+    }
     if (!config.sellviaCatalogEndpoint && !config.catalogFixturePath) {
       blockers.push('Missing SELLVIA_CATALOG_ENDPOINT (or SELLVIA_CATALOG_FIXTURE_PATH for local validation)');
     }
@@ -532,9 +534,22 @@ export async function runSync({ config, shopifyClient, sellviaClient }) {
         } else {
           if (Object.keys(changes.product).length) {
             await shopifyClient.updateProduct(match.product.id, changes.product);
+            Object.assign(match.product, changes.product);
           }
           if (Object.keys(changes.variant).length) {
             await shopifyClient.updateVariant(match.variant.id, changes.variant);
+            Object.assign(match.variant, changes.variant);
+          }
+          index = buildShopifyIndex(shopifyProducts);
+          match = resolveShopifyMatch(sourceProduct, index);
+          if (match.type !== 'matched') {
+            count(report, 'failed');
+            recordOperation(report, {
+              status: 'failed',
+              identity,
+              reason: 'Updated Shopify product could not be re-matched for follow-up operations',
+            });
+            continue;
           }
           count(report, 'updated');
           recordOperation(report, {

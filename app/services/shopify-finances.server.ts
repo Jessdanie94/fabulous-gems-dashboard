@@ -16,6 +16,22 @@ interface ShopifyPayout {
   issued_at: string;
 }
 
+interface ShopifyPayoutResponse {
+  data: {
+    shopPaymentAccount: {
+      balance: {
+        amount: string;
+        currencyCode: string;
+      };
+    };
+    payouts: {
+      edges: Array<{
+        node: ShopifyPayout;
+      }>;
+    };
+  };
+}
+
 /**
  * Get pending balance and recent payouts from Shopify Payments
  */
@@ -49,21 +65,7 @@ export async function getShopifyPayouts(request: LoaderFunctionArgs["request"]) 
     `;
 
     const response = await admin.graphql(query);
-    const data = (await response.json()) as {
-      data: {
-        shopPaymentAccount: {
-          balance: {
-            amount: string;
-            currencyCode: string;
-          };
-        };
-        payouts: {
-          edges: Array<{
-            node: ShopifyPayout;
-          }>;
-        };
-      };
-    };
+    const data = (await response.json()) as ShopifyPayoutResponse;
 
     if (!data.data) {
       throw new Error("Invalid response from Shopify API");

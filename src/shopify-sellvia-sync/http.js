@@ -83,9 +83,11 @@ export async function requestWithRetry(url, options = {}, runtime = {}) {
     }
 
     try {
+      const remainingBudgetMs = deadlineAt ? Math.max(1, deadlineAt - Date.now()) : timeoutMs;
+      const attemptTimeoutMs = Math.max(1, Math.min(timeoutMs, remainingBudgetMs));
       const response = await fetchImpl(url, {
         ...options,
-        signal: joinSignals([options.signal, createTimeoutSignal(timeoutMs)]),
+        signal: joinSignals([options.signal, createTimeoutSignal(attemptTimeoutMs)]),
       });
 
       if (response.ok) {
