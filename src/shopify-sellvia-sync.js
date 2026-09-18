@@ -254,6 +254,11 @@ async function loadCollectionFromSource({ url, file, headers = {}, timeoutMs, ma
       continue;
     }
 
+    if (/^https?:\/\//.test(nextCursor)) {
+      nextUrl = nextCursor;
+      continue;
+    }
+
     const currentUrl = new URL(nextUrl);
     currentUrl.searchParams.set("cursor", nextCursor);
     nextUrl = currentUrl.toString();
@@ -353,7 +358,15 @@ export function indexShopifyProducts(products = []) {
       title: product.title,
       handle: product.handle,
       tags: tagList(product.tags),
-      variants: Array.isArray(product.variants) ? product.variants : [],
+      variants: Array.isArray(product.variants)
+        ? product.variants.map((variant) => ({
+            id: variant.id,
+            sku: variant.sku,
+            price: variant.price,
+            inventory_quantity: variant.inventory_quantity,
+            inventory_item_id: variant.inventory_item_id,
+          }))
+        : [],
     };
 
     for (const tag of record.tags) {
@@ -400,6 +413,10 @@ export function planProductChanges(sellviaProducts, shopifyProducts) {
 
     const variant = match.variants.find((candidate) => candidate?.sku && candidate.sku.toLowerCase() === product.sku?.toLowerCase())
       || match.variants[0];
+
+    if (!variant && (product.price !== undefined || product.inventory !== undefined)) {
+      throw new Error(`Matched Shopify product is missing a variant for ${identityKey}`);
+    }
 
     const updates = [];
     if (product.title && product.title !== match.title) {
@@ -484,7 +501,7 @@ async function applyCreate(config, action, counters) {
     },
   };
 
-  if (config.dryRun || !config.writesEnabled) {
+  if (config.dryRun) {
     counters.created += 1;
     return { simulated: true, payload };
   }
@@ -510,29 +527,49 @@ async function applyCreate(config, action, counters) {
   return response.json();
 }
 
-async function applyUpdate(config, action, counters) {
-  const nonInventoryUpdates = action.updates.filter((update) => update.field !== "inventory");
-  const inventoryUpdate = action.updates.find((update) => update.field === "inventory");
-
-  if (action.updates.some((update) => update.field === "price") && !config.priceWritesEnabled && !config.dryRun) {
-    throw new Error(`Price write requested without SYNC_ENABLE_PRICE_WRITES for ${action.identityKey}`);
-  }
-
-  if (inventoryUpdate && !config.inventoryWritesEnabled && !config.dryRun) {
-    throw new Error(`Inventory write requested without SYNC_ENABLE_INVENTORY_WRITES for ${action.identityKey}`);
-  }
-
-  if (!config.dryRun && inventoryUpdate && !config.shopify.locationId) {
-    throw new Error(`SHOPIFY_LOCATION_ID is required for inventory updates (${action.identityKey})`);
-  }
-
-  if (!config.dryRun && !config.writesEnabled) {
-    throw new Error(`Write attempted while SYNC_ENABLE_WRITES is disabled (${action.identityKey})`);
-  }
-
+async function applyUpdate(config, action, counters, warnings) {
   if (config.dryRun) {
     counters.updated += 1;
     return { simulated: true };
+  }
+
+  const allowedUpdates = action.updates.filter((update) => {
+    if (update.field === "price" && !config.priceWritesEnabled) {
+      warnings.push(`Skipped price mutation for ${action.identityKey} because SYNC_ENABLE_PRICE_WRITES is false.`);
+      return false;
+    }
+
+    if (update.field === "inventory") {
+      if (!config.inventoryWritesEnabled) {
+        warnings.push(`Skipped inventory mutation for ${action.identityKey} because SYNC_ENABLE_INVENTORY_WRITES is false.`);
+        return false;
+      }
+      if (!config.shopify.locationId) {
+        warnings.push(`Skipped inventory mutation for ${action.identityKey} because SHOPIFY_LOCATION_ID is not configured.`);
+        return false;
+      }
+      if (!action.target.variant?.inventory_item_id) {
+        throw new Error(`Matched Shopify variant is missing inventory_item_id for ${action.identityKey}`);
+      }
+    }
+
+    if ((update.field === "price" || update.field === "inventory") && !action.target.variant) {
+      throw new Error(`Matched Shopify product is missing a variant for ${action.identityKey}`);
+    }
+
+    return true;
+  });
+
+  if (allowedUpdates.length === 0) {
+    counters.skipped += 1;
+    return { skipped: true };
+  }
+
+  const nonInventoryUpdates = allowedUpdates.filter((update) => update.field !== "inventory");
+  const inventoryUpdate = allowedUpdates.find((update) => update.field === "inventory");
+
+  if (!config.writesEnabled) {
+    throw new Error(`Pending mutations require SYNC_ENABLE_WRITES=true (${action.identityKey})`);
   }
 
   if (nonInventoryUpdates.length > 0) {
@@ -596,10 +633,15 @@ async function applyUpdate(config, action, counters) {
 }
 
 function enforceMutationSafety(config, plan) {
-  const riskyMutations = plan.filter(
-    (action) => action.action !== "skip" && action.updates.some((update) => update.risk === "high"),
+  const actionableMutations = plan.filter((action) => action.action !== "skip");
+  const riskyMutations = actionableMutations.filter((action) =>
+    action.updates.some((update) => update.risk === "high"),
   );
-  const totalMutations = plan.filter((action) => action.action !== "skip").length;
+  const totalMutations = actionableMutations.length;
+
+  if (!config.dryRun && totalMutations > 0 && !config.writesEnabled) {
+    throw new Error("Pending mutations detected while SYNC_ENABLE_WRITES is disabled.");
+  }
 
   if (!config.dryRun && totalMutations > BULK_MUTATION_APPROVAL_THRESHOLD && !config.approveBulkChanges) {
     throw new Error(
@@ -796,7 +838,7 @@ export async function runSync(options = {}) {
           await applyCreate(config, action, counters);
           continue;
         }
-        await applyUpdate(config, action, counters);
+        await applyUpdate(config, action, counters, warnings);
       } catch (error) {
         counters.failed += 1;
         errors.push(`${action.identityKey}: ${error.message}`);
