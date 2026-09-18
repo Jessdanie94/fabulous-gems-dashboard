@@ -171,7 +171,7 @@ fabulous-gems-dashboard/
 
 ## Autonomous Shopify + Sellvia Sync
 
-The repository now includes a production-safe sync control plane driven by `node check-stores.js` and the GitHub Actions workflow at `.github/workflows/shopify-sellvia-sync.yml`.
+The repository now includes a production-safe sync control plane driven by `node shopify-sellvia-sync.js` and the GitHub Actions workflow at `.github/workflows/shopify-sellvia-sync.yml`.
 
 ### Architecture and Data Flow
 
