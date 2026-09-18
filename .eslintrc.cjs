@@ -1,4 +1,4 @@
-/** @type {import('@types/eslint').Linter.BaseConfig} */
+/** @type {import("@types/eslint").Linter.BaseConfig} */
 module.exports = {
   root: true,
   extends: [
@@ -7,7 +7,12 @@ module.exports = {
     "@remix-run/eslint-config/jest-testing-library",
     "prettier",
   ],
+  settings: {
+    jest: {
+      version: 29,
+    },
+  },
   globals: {
-    shopify: "readonly"
+    shopify: "readonly",
   },
 };

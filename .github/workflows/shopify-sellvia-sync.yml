@@ -2,8 +2,29 @@ name: Shopify + Sellvia Sync
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Run without writing to Shopify
+        required: false
+        default: true
+        type: boolean
+      scope:
+        description: Sync scope
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - catalog
+          - inventory
+          - price
+          - orders
+          - catalog,inventory,price
   schedule:
     - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
 
 concurrency:
   group: shopify-sellvia-sync
@@ -12,26 +33,38 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    timeout-minutes: 30
+    env:
+      SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+      SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
+      SHOPIFY_API_TOKEN: ${{ secrets.SHOPIFY_API_TOKEN }}
+      SHOPIFY_LOCATION_ID: ${{ secrets.SHOPIFY_LOCATION_ID }}
+      SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
+      SELLVIA_MASTER_KEY: ${{ secrets.SELLVIA_MASTER_KEY }}
+      SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
+      SELLVIA_PRODUCTS_URL: ${{ secrets.SELLVIA_PRODUCTS_URL }}
+      SELLVIA_INVENTORY_URL: ${{ secrets.SELLVIA_INVENTORY_URL }}
+      SELLVIA_PRICES_URL: ${{ secrets.SELLVIA_PRICES_URL }}
+      SELLVIA_ORDERS_URL: ${{ secrets.SELLVIA_ORDERS_URL }}
+      SYNC_FAILURE_WEBHOOK_URL: ${{ secrets.SYNC_FAILURE_WEBHOOK_URL }}
+      SYNC_ARTIFACTS_DIR: artifacts/shopify-sellvia-sync
+      SYNC_DRY_RUN: ${{ github.event_name == 'schedule' && 'true' || inputs.dry_run && 'true' || 'false' }}
+      SYNC_SCOPE: ${{ github.event_name == 'schedule' && 'catalog,inventory,price' || inputs.scope || 'all' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Preflight - validate required secrets
-        env:
-          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
-          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
-          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
-          SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
+        shell: bash
         run: |
+          set -euo pipefail
           missing=0
 
           check_required () {
             key="$1"
-            val="$2"
-            if [ -z "$val" ]; then
-              echo "::error::Missing required secret: $key"
+            value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::Missing required configuration: $key"
               missing=1
             else
               echo "::notice::$key is set"
@@ -40,41 +73,89 @@ jobs:
 
           check_optional () {
             key="$1"
-            val="$2"
-            if [ -z "$val" ]; then
-              echo "::notice::Optional secret not set: $key"
+            value="$2"
+            if [ -z "$value" ]; then
+              echo "::notice::Optional configuration not set: $key"
             else
               echo "::notice::$key is set"
             fi
           }
 
           check_required "SHOPIFY_STORE_DOMAIN" "$SHOPIFY_STORE_DOMAIN"
-          check_required "SHOPIFY_ADMIN_ACCESS_TOKEN" "$SHOPIFY_ADMIN_ACCESS_TOKEN"
-          check_required "SELLVIA_API_KEY" "$SELLVIA_API_KEY"
+          check_required "SHOPIFY_ADMIN_ACCESS_TOKEN or SHOPIFY_API_TOKEN" "${SHOPIFY_ADMIN_ACCESS_TOKEN:-$SHOPIFY_API_TOKEN}"
+          check_required "SELLVIA_API_KEY or SELLVIA_MASTER_KEY" "${SELLVIA_API_KEY:-$SELLVIA_MASTER_KEY}"
+          check_optional "SHOPIFY_LOCATION_ID" "$SHOPIFY_LOCATION_ID"
           check_optional "SELLVIA_API_BASE_URL" "$SELLVIA_API_BASE_URL"
+          check_optional "SELLVIA_PRODUCTS_URL" "$SELLVIA_PRODUCTS_URL"
+          check_optional "SELLVIA_INVENTORY_URL" "$SELLVIA_INVENTORY_URL"
+          check_optional "SELLVIA_PRICES_URL" "$SELLVIA_PRICES_URL"
+          check_optional "SELLVIA_ORDERS_URL" "$SELLVIA_ORDERS_URL"
+          check_optional "SYNC_FAILURE_WEBHOOK_URL" "$SYNC_FAILURE_WEBHOOK_URL"
 
           if [ "$missing" -ne 0 ]; then
-            echo "::error::Preflight failed due to missing required secrets."
+            echo "::error::Preflight failed due to missing required secrets/configuration."
             exit 1
           fi
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 22.12.0
+          cache: npm
 
       - name: Install dependencies
+        shell: bash
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then
+            corepack enable
+            yarn install --immutable
+          else
+            npm install
+          fi
 
       - name: Run Shopify/Sellvia sync
-        env:
-          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
-          SHOPIFY_ADMIN_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ADMIN_ACCESS_TOKEN }}
-          SELLVIA_API_KEY: ${{ secrets.SELLVIA_API_KEY }}
-          SELLVIA_API_BASE_URL: ${{ secrets.SELLVIA_API_BASE_URL }}
+        shell: bash
         run: |
-          echo "Starting sync..."
-          npm run sync:shopify || echo "sync:shopify not yet configured"
-          npm run sync:sellvia || echo "sync:sellvia not yet configured"
-          echo "Sync step complete."
+          set -euo pipefail
+          npm run sync:shopify-sellvia -- --dry-run "$SYNC_DRY_RUN" --scope "$SYNC_SCOPE"
+
+      - name: Publish job summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$SYNC_ARTIFACTS_DIR/summary.md" ]; then
+            cat "$SYNC_ARTIFACTS_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload sync artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shopify-sellvia-sync-artifacts
+          path: |
+            artifacts/shopify-sellvia-sync/summary.json
+            artifacts/shopify-sellvia-sync/details.json
+            artifacts/shopify-sellvia-sync/summary.md
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Notify webhook on failure
+        if: failure() && env.SYNC_FAILURE_WEBHOOK_URL != ''
+        shell: bash
+        run: |
+          payload_file="$SYNC_ARTIFACTS_DIR/summary.json"
+          if [ ! -f "$payload_file" ]; then
+            payload_file=$(mktemp)
+            printf '{"status":"failure","message":"Shopify + Sellvia sync failed before summary generation"}' > "$payload_file"
+          fi
+          curl --fail --silent --show-error \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            --data @"$payload_file" \
+            "$SYNC_FAILURE_WEBHOOK_URL"
