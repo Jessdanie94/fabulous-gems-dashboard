@@ -56,3 +56,32 @@ module.exports = {
     }
   ]
 };
+/** @type {import('eslint').Linter.Config} */
+module.exports = {
+  root: true,
+  env: {
+    node: true,
+    es2022: true,
+  },
+  parserOptions: {
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+  },
+  extends: ['eslint:recommended'],
+  rules: {
+    'prefer-const': 'error',
+    'no-var': 'error',
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    'eqeqeq': ['error', 'always'],
+    'no-console': 'off',
+  },
+  ignorePatterns: [
+    'node_modules/',
+    'dist/',
+    'build/',
+    'exports/',
+    '*.pdf',
+    '*.csv',
+    '.github/',
+  ],
+};
