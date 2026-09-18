@@ -351,6 +351,7 @@ export function buildCreatePayload(sourceProduct, config) {
 export function validateConfig(config) {
   const blockers = [];
   const productScopeEnabled = PRODUCT_SCOPES.some((scope) => config.scope.has(scope));
+  const orderOnlyScope = config.scope.size === 1 && config.scope.has('orders');
 
   if (productScopeEnabled) {
     if (!config.shopifyProductsFixturePath && !config.shopifyStoreDomain) blockers.push('Missing SHOPIFY_STORE_DOMAIN');
@@ -361,6 +362,12 @@ export function validateConfig(config) {
     if (!config.sellviaCatalogEndpoint && !config.catalogFixturePath) {
       blockers.push('Missing SELLVIA_CATALOG_ENDPOINT (or SELLVIA_CATALOG_FIXTURE_PATH for local validation)');
     }
+  }
+
+  if (orderOnlyScope && (!config.enableOrderSync || !config.sellviaOrderEndpoint)) {
+    blockers.push(
+      'Order-only runs are blocked until SHOPIFY_SELLVIA_ENABLE_ORDER_SYNC=true and SELLVIA_ORDER_ENDPOINT are both configured.',
+    );
   }
 
   return blockers;

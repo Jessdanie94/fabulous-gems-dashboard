@@ -275,7 +275,7 @@ This project is part of the Shopify App ecosystem.
 
 ## Shopify + Sellvia Sync Automation
 
-This repository now includes an in-repo sync runner at `/home/runner/work/fabulous-gems-dashboard/fabulous-gems-dashboard/src/shopify-sellvia-sync/cli.js` plus the GitHub Actions workflow `/home/runner/work/fabulous-gems-dashboard/fabulous-gems-dashboard/.github/workflows/shopify-sellvia-sync.yml`.
+This repository now includes an in-repo sync runner at `src/shopify-sellvia-sync/cli.js` plus the GitHub Actions workflow `.github/workflows/shopify-sellvia-sync.yml`.
 
 ### Architecture and data flow
 
@@ -395,4 +395,3 @@ For local dry-run validation without live Sellvia credentials, you can point `SE
 - Order synchronization is not advertised as production-ready here because this repository does not yet contain a verified Sellvia-to-Shopify order contract or safe irreversible-order policy.
 - Catalog matching assumes either a stable Sellvia external id or a unique Shopify SKU.
 - Inventory synchronization targets one Shopify location per run.
-

@@ -59,6 +59,12 @@ function isRetryableStatus(status) {
   return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
 
+function isExplicitAbort(error, options, deadlineAt) {
+  if (options.signal?.aborted) return true;
+  if (deadlineAt && Date.now() >= deadlineAt) return true;
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 export async function requestWithRetry(url, options = {}, runtime = {}) {
   const {
     fetchImpl = fetch,
@@ -109,6 +115,9 @@ export async function requestWithRetry(url, options = {}, runtime = {}) {
     } catch (error) {
       lastError = error;
       if (error instanceof FatalRequestError) {
+        break;
+      }
+      if (isExplicitAbort(error, options, deadlineAt)) {
         break;
       }
       if (attempt === maxAttempts) {

@@ -71,6 +71,20 @@ describe('shopify-sellvia sync helpers', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(sleepImpl).toHaveBeenCalledTimes(1);
   });
+
+  it('does not retry an explicitly aborted request', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchImpl = vi.fn().mockRejectedValue(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+    const sleepImpl = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      requestWithRetry('https://example.test/items', { signal: controller.signal }, { fetchImpl, sleepImpl, maxAttempts: 3 }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(sleepImpl).not.toHaveBeenCalled();
+  });
 });
 
 describe('runSync', () => {
@@ -183,5 +197,22 @@ describe('runSync', () => {
 
     expect(report.status).toBe('failed');
     expect(report.blockers).toContain('Missing SELLVIA_CATALOG_ENDPOINT (or SELLVIA_CATALOG_FIXTURE_PATH for local validation)');
+  });
+
+  it('fails closed for order-only runs without explicit order support', async () => {
+    const report: any = await runSync({
+      config: {
+        ...baseConfig,
+        scope: parseScope('orders'),
+        sellviaCatalogEndpoint: '',
+      },
+      shopifyClient: {} as any,
+      sellviaClient: {} as any,
+    });
+
+    expect(report.status).toBe('failed');
+    expect(report.blockers).toContain(
+      'Order-only runs are blocked until SHOPIFY_SELLVIA_ENABLE_ORDER_SYNC=true and SELLVIA_ORDER_ENDPOINT are both configured.',
+    );
   });
 });
