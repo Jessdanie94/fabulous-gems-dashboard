@@ -20,6 +20,26 @@ on:
           - price
           - orders
           - catalog,inventory,price
+      enable_writes:
+        description: Enable Shopify writes
+        required: false
+        default: false
+        type: boolean
+      enable_price_writes:
+        description: Enable Shopify price writes
+        required: false
+        default: false
+        type: boolean
+      enable_inventory_writes:
+        description: Enable Shopify inventory writes
+        required: false
+        default: false
+        type: boolean
+      approve_bulk_changes:
+        description: Approve bulk or high-risk mutations
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "*/30 * * * *"
 
@@ -50,6 +70,10 @@ jobs:
       SYNC_ARTIFACTS_DIR: artifacts/shopify-sellvia-sync
       SYNC_DRY_RUN: ${{ github.event_name == 'schedule' && 'true' || inputs.dry_run && 'true' || 'false' }}
       SYNC_SCOPE: ${{ github.event_name == 'schedule' && 'catalog,inventory,price' || inputs.scope || 'all' }}
+      SYNC_ENABLE_WRITES: ${{ github.event_name == 'schedule' && 'false' || inputs.enable_writes && 'true' || 'false' }}
+      SYNC_ENABLE_PRICE_WRITES: ${{ github.event_name == 'schedule' && 'false' || inputs.enable_price_writes && 'true' || 'false' }}
+      SYNC_ENABLE_INVENTORY_WRITES: ${{ github.event_name == 'schedule' && 'false' || inputs.enable_inventory_writes && 'true' || 'false' }}
+      SYNC_APPROVE_BULK_CHANGES: ${{ github.event_name == 'schedule' && 'false' || inputs.approve_bulk_changes && 'true' || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,15 +105,44 @@ jobs:
             fi
           }
 
+          has_scope () {
+            scope_name="$1"
+            case ",$SYNC_SCOPE," in
+              *",all,"*|*",$scope_name,"*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
           check_required "SHOPIFY_STORE_DOMAIN" "$SHOPIFY_STORE_DOMAIN"
           check_required "SHOPIFY_ADMIN_ACCESS_TOKEN or SHOPIFY_API_TOKEN" "${SHOPIFY_ADMIN_ACCESS_TOKEN:-$SHOPIFY_API_TOKEN}"
           check_required "SELLVIA_API_KEY or SELLVIA_MASTER_KEY" "${SELLVIA_API_KEY:-$SELLVIA_MASTER_KEY}"
           check_optional "SHOPIFY_LOCATION_ID" "$SHOPIFY_LOCATION_ID"
           check_optional "SELLVIA_API_BASE_URL" "$SELLVIA_API_BASE_URL"
-          check_optional "SELLVIA_PRODUCTS_URL" "$SELLVIA_PRODUCTS_URL"
-          check_optional "SELLVIA_INVENTORY_URL" "$SELLVIA_INVENTORY_URL"
-          check_optional "SELLVIA_PRICES_URL" "$SELLVIA_PRICES_URL"
-          check_optional "SELLVIA_ORDERS_URL" "$SELLVIA_ORDERS_URL"
+
+          if has_scope "catalog"; then
+            check_required "SELLVIA_PRODUCTS_URL" "$SELLVIA_PRODUCTS_URL"
+          else
+            check_optional "SELLVIA_PRODUCTS_URL" "$SELLVIA_PRODUCTS_URL"
+          fi
+
+          if has_scope "inventory"; then
+            check_required "SELLVIA_INVENTORY_URL" "$SELLVIA_INVENTORY_URL"
+          else
+            check_optional "SELLVIA_INVENTORY_URL" "$SELLVIA_INVENTORY_URL"
+          fi
+
+          if has_scope "price"; then
+            check_required "SELLVIA_PRICES_URL" "$SELLVIA_PRICES_URL"
+          else
+            check_optional "SELLVIA_PRICES_URL" "$SELLVIA_PRICES_URL"
+          fi
+
+          if has_scope "orders"; then
+            check_required "SELLVIA_ORDERS_URL" "$SELLVIA_ORDERS_URL"
+          else
+            check_optional "SELLVIA_ORDERS_URL" "$SELLVIA_ORDERS_URL"
+          fi
+
           check_optional "SYNC_FAILURE_WEBHOOK_URL" "$SYNC_FAILURE_WEBHOOK_URL"
 
           if [ "$missing" -ne 0 ]; then
@@ -101,7 +154,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
         shell: bash

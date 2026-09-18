@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createAdminRestApiClient } from "@shopify/admin-api-client";
 
 const DEFAULT_SELLVIA_BASE_URL = "https://api.sellvia.com";
 const DEFAULT_SHOPIFY_API_VERSION = "2025-01";
@@ -172,9 +173,17 @@ function isTransientError(error) {
   );
 }
 
+function isRetrySafeRequest(init = {}, options = {}) {
+  if (options.idempotent === true) return true;
+  const method = String(init.method || "GET").toUpperCase();
+  return ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].includes(method);
+}
+
 export async function requestWithRetry(url, init = {}, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const maxRetries = Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES);
+  const maxRetries = isRetrySafeRequest(init, options)
+    ? Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES)
+    : 0;
   const backoffMs = options.backoffMs ?? DEFAULT_BACKOFF_MS;
   let rateLimited = 0;
   let attempts = 0;
@@ -191,7 +200,7 @@ export async function requestWithRetry(url, init = {}, options = {}) {
       }
 
       if (!response.ok && isRetryableStatus(response.status) && attempt < maxRetries) {
-        const error = new Error(`Transient HTTP ${response.status} from ${url}`);
+        const error = new Error(`Transient HTTP ${response.status} from remote endpoint`);
         error.retryable = true;
         error.status = response.status;
         const fallbackDelay = nextBackoffDelay(backoffMs, attempt + 1);
@@ -215,7 +224,7 @@ export async function requestWithRetry(url, init = {}, options = {}) {
     }
   }
 
-  throw new Error(`Failed request to ${url} after ${attempts} attempts`);
+  throw new Error(`Failed request to remote endpoint after ${attempts} attempts`);
 }
 
 async function readJsonFile(filePath) {
@@ -262,7 +271,7 @@ async function loadCollectionFromSource({ url, file, headers = {}, timeoutMs, ma
   while (nextUrl) {
     pages += 1;
     if (pages > 100) {
-      throw new Error(`Pagination safety stop exceeded for ${url}`);
+      throw new Error("Pagination safety stop exceeded for remote endpoint");
     }
 
     const { response } = await requestWithRetry(nextUrl, { headers }, { timeoutMs, maxRetries, backoffMs });
@@ -327,7 +336,7 @@ function normalizeSellviaReference(record) {
   const sku = sanitizeString(record?.sku ?? variant?.sku);
   const externalId = sanitizeString(record?.externalId ?? record?.id ?? record?.productId);
   const title = sanitizeString(record?.title ?? record?.name ?? variant?.title);
-  const handle = normalizeHandle(record?.handle ?? title ?? sku ?? externalId);
+  const handle = normalizeHandle(record?.handle);
 
   if (!externalId && !sku && !handle) {
     throw new Error(`Sellvia record ${title || "unknown"} is missing all identity fields`);
@@ -336,21 +345,24 @@ function normalizeSellviaReference(record) {
   return { variant, sku, externalId, title, handle };
 }
 
-function normalizeSellviaProduct(record) {
+function normalizeSellviaProduct(record, options = {}) {
+  const { allowCreates = true, includeTitle = true, includeHandle = true, includePrice = true, includeInventory = true } = options;
   const { variant, sku, externalId, title, handle } = normalizeSellviaReference(record);
 
-  if (!title) {
+  if (allowCreates && !title) {
     throw new Error("Sellvia record is missing a title/name");
   }
 
   return {
     externalId,
     sku,
-    title,
-    handle,
+    title: includeTitle ? title : undefined,
+    handle: handle ?? (includeHandle ? normalizeHandle(title ?? sku ?? externalId) : undefined),
     vendor: sanitizeString(record?.vendor) || "Sellvia",
-    price: normalizePrice(record?.price ?? record?.salePrice ?? variant?.price),
-    inventory: normalizeInventory(record?.inventory ?? record?.stock ?? record?.quantity ?? variant?.inventory_quantity),
+    price: includePrice ? normalizePrice(record?.price ?? record?.salePrice ?? variant?.price) : undefined,
+    inventory: includeInventory
+      ? normalizeInventory(record?.inventory ?? record?.stock ?? record?.quantity ?? variant?.inventory_quantity)
+      : undefined,
     tags: Array.isArray(record?.tags) ? record.tags.map(String) : [],
     raw: record,
   };
@@ -361,6 +373,21 @@ export function buildIdentityKey(record) {
   if (record.sku) return `sku:${record.sku.toLowerCase()}`;
   if (record.handle) return `handle:${record.handle}`;
   throw new Error(`Unable to build identity key for ${record.title || "unknown product"}`);
+}
+
+function pushIdentityCandidate(index, key, record) {
+  const existing = index.get(key) || [];
+  if (!existing.some((candidate) => candidate.id === record.id)) {
+    index.set(key, [...existing, record]);
+  }
+}
+
+function resolveShopifyIdentity(index, identityKey) {
+  const matches = index.get(identityKey) || [];
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous Shopify mapping detected for ${identityKey}`);
+  }
+  return matches[0];
 }
 
 function tagList(tags) {
@@ -392,17 +419,17 @@ export function indexShopifyProducts(products = []) {
 
     for (const tag of record.tags) {
       if (tag.startsWith("sellvia-id:")) {
-        index.set(`external:${tag.slice("sellvia-id:".length)}`, record);
+        pushIdentityCandidate(index, `external:${tag.slice("sellvia-id:".length)}`, record);
       }
     }
 
     if (record.handle) {
-      index.set(`handle:${record.handle}`, record);
+      pushIdentityCandidate(index, `handle:${record.handle}`, record);
     }
 
     for (const variant of record.variants) {
       if (variant?.sku) {
-        index.set(`sku:${String(variant.sku).toLowerCase()}`, record);
+        pushIdentityCandidate(index, `sku:${String(variant.sku).toLowerCase()}`, record);
       }
     }
   }
@@ -410,19 +437,22 @@ export function indexShopifyProducts(products = []) {
   return index;
 }
 
-export function planProductChanges(sellviaProducts, shopifyProducts) {
-  const normalized = sellviaProducts.map(normalizeSellviaProduct);
+export function planProductChanges(sellviaProducts, shopifyProducts, options = {}) {
+  const normalized = sellviaProducts.map((record) => normalizeSellviaProduct(record, options));
   const index = indexShopifyProducts(shopifyProducts);
   const seenTargets = new Set();
   const plan = [];
 
   for (const product of normalized) {
     const identityKey = buildIdentityKey(product);
-    const match = index.get(identityKey)
-      || (product.sku ? index.get(`sku:${product.sku.toLowerCase()}`) : undefined)
-      || (product.handle ? index.get(`handle:${product.handle}`) : undefined);
+    const match = resolveShopifyIdentity(index, identityKey)
+      || (product.sku ? resolveShopifyIdentity(index, `sku:${product.sku.toLowerCase()}`) : undefined)
+      || (product.handle ? resolveShopifyIdentity(index, `handle:${product.handle}`) : undefined);
 
     if (!match) {
+      if (options.allowCreates === false) {
+        throw new Error(`Catalog creation is disabled for ${identityKey} outside catalog scope`);
+      }
       plan.push({ action: "create", identityKey, source: product, target: null, updates: [] });
       continue;
     }
@@ -440,16 +470,20 @@ export function planProductChanges(sellviaProducts, shopifyProducts) {
     }
 
     const updates = [];
-    if (product.title && product.title !== match.title) {
+    if (options.includeTitle !== false && product.title && product.title !== match.title) {
       updates.push({ field: "title", from: match.title, to: product.title, risk: "medium" });
     }
-    if (product.handle && product.handle !== match.handle) {
+    if (options.includeHandle !== false && product.handle && product.handle !== match.handle) {
       updates.push({ field: "handle", from: match.handle, to: product.handle, risk: "medium" });
     }
-    if (product.price && variant?.price !== product.price) {
+    if (options.includePrice !== false && product.price && variant?.price !== product.price) {
       updates.push({ field: "price", from: variant?.price, to: product.price, risk: "high" });
     }
-    if (product.inventory !== undefined && variant?.inventory_quantity !== product.inventory) {
+    if (
+      options.includeInventory !== false
+      && product.inventory !== undefined
+      && variant?.inventory_quantity !== product.inventory
+    ) {
       updates.push({ field: "inventory", from: variant?.inventory_quantity, to: product.inventory, risk: "high" });
     }
 
@@ -476,37 +510,94 @@ function parseLinkHeader(linkHeader) {
   return null;
 }
 
-async function fetchAllShopifyProducts(config, counters) {
+function createShopifyRestClient(config) {
+  const tracker = { rateLimited: 0 };
+  const client = createAdminRestApiClient({
+    storeDomain: config.shopify.storeDomain,
+    apiVersion: config.shopify.apiVersion,
+    accessToken: config.shopify.accessToken,
+    retries: 0,
+    customFetchApi: async (url, init) => {
+      const { response, rateLimited } = await requestWithRetry(url, init, config);
+      tracker.rateLimited += rateLimited;
+      return response;
+    },
+  });
+
+  return { client, tracker };
+}
+
+async function runShopifyRequest(tracker, counters, request) {
+  const startingRateLimited = tracker.rateLimited;
+  const response = await request();
+  counters.rateLimited += tracker.rateLimited - startingRateLimited;
+  return response;
+}
+
+function extractShopifyRestPath(config, url) {
+  const parsedUrl = new URL(url);
+  const prefix = `/admin/api/${config.shopify.apiVersion}/`;
+  if (!parsedUrl.pathname.startsWith(prefix)) {
+    throw new Error("Unexpected Shopify pagination link received");
+  }
+  return {
+    path: parsedUrl.pathname.slice(prefix.length).replace(/\.json$/, ""),
+    searchParams: Object.fromEntries(parsedUrl.searchParams.entries()),
+  };
+}
+
+async function fetchAllShopifyProducts(config, shopify, counters) {
   if (config.shopify.productsFile) {
     return extractArrayPayload(await readJsonFile(config.shopify.productsFile));
   }
 
-  const headers = {
-    "X-Shopify-Access-Token": config.shopify.accessToken,
-    "Content-Type": "application/json",
-  };
   const products = [];
-  let nextUrl = `https://${config.shopify.storeDomain}/admin/api/${config.shopify.apiVersion}/products.json?limit=250`;
+  let nextRequest = { path: "products", searchParams: { limit: "250" } };
   let pages = 0;
 
-  while (nextUrl) {
+  while (nextRequest) {
     pages += 1;
     if (pages > 100) {
       throw new Error("Shopify pagination safety stop exceeded");
     }
 
-    const { response, rateLimited } = await requestWithRetry(nextUrl, { headers }, config);
-    counters.rateLimited += rateLimited;
+    const currentRequest = nextRequest;
+    const response = await runShopifyRequest(shopify.tracker, counters, () =>
+      shopify.client.get(currentRequest.path, { searchParams: currentRequest.searchParams }),
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to fetch Shopify products (HTTP ${response.status})`);
+    }
     const payload = await response.json();
     products.push(...(payload.products || []));
-    nextUrl = parseLinkHeader(response.headers.get("link"));
+    const nextLink = parseLinkHeader(response.headers.get("link"));
+    nextRequest = nextLink ? extractShopifyRestPath(config, nextLink) : null;
   }
 
   return products;
 }
 
-async function applyCreate(config, action, counters) {
-  const payload = {
+function getCreatePayload(config, action, warnings) {
+  const priceEnabled = config.scopes.includes("price") && config.priceWritesEnabled;
+  const inventoryEnabled =
+    config.scopes.includes("inventory")
+    && config.inventoryWritesEnabled
+    && Boolean(config.shopify.locationId);
+
+  if (config.scopes.includes("price") && action.source.price !== undefined && !config.priceWritesEnabled) {
+    warnings?.push(`Deferred price on create for ${action.identityKey} because SYNC_ENABLE_PRICE_WRITES is false.`);
+  }
+  if (config.scopes.includes("inventory") && action.source.inventory !== undefined) {
+    if (!config.inventoryWritesEnabled) {
+      warnings?.push(
+        `Deferred inventory on create for ${action.identityKey} because SYNC_ENABLE_INVENTORY_WRITES is false.`,
+      );
+    } else if (!config.shopify.locationId) {
+      warnings?.push(`Deferred inventory on create for ${action.identityKey} because SHOPIFY_LOCATION_ID is not configured.`);
+    }
+  }
+
+  return {
     product: {
       title: action.source.title,
       handle: action.source.handle,
@@ -515,37 +606,63 @@ async function applyCreate(config, action, counters) {
       variants: [
         {
           sku: action.source.sku,
-          price: action.source.price,
-          inventory_management: action.source.inventory !== undefined ? "shopify" : undefined,
+          price: priceEnabled ? action.source.price : undefined,
+          inventory_management: inventoryEnabled && action.source.inventory !== undefined ? "shopify" : undefined,
         },
       ],
     },
   };
+}
+
+async function applyCreate(config, shopify, action, counters, warnings) {
+  const payload = getCreatePayload(config, action, warnings);
 
   if (config.dryRun) {
     counters.created += 1;
     return { simulated: true, payload };
   }
 
-  const url = `https://${config.shopify.storeDomain}/admin/api/${config.shopify.apiVersion}/products.json`;
-  const { response, rateLimited } = await requestWithRetry(
-    url,
-    {
-      method: "POST",
-      headers: {
-        "X-Shopify-Access-Token": config.shopify.accessToken,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    },
-    config,
+  if (!config.writesEnabled) {
+    throw new Error(`Pending mutations require SYNC_ENABLE_WRITES=true (${action.identityKey})`);
+  }
+
+  const response = await runShopifyRequest(shopify.tracker, counters, () =>
+    shopify.client.post("products", { data: payload }),
   );
-  counters.rateLimited += rateLimited;
   if (!response.ok) {
     throw new Error(`Failed to create Shopify product for ${action.identityKey}`);
   }
+
+  const createdProduct = await response.json();
+  const createdVariant = createdProduct?.product?.variants?.[0];
+
+  if (
+    config.scopes.includes("inventory")
+    && config.inventoryWritesEnabled
+    && config.shopify.locationId
+    && action.source.inventory !== undefined
+  ) {
+    if (!createdVariant?.inventory_item_id) {
+      throw new Error(`Created Shopify variant is missing inventory_item_id for ${action.identityKey}`);
+    }
+
+    const inventoryResponse = await runShopifyRequest(shopify.tracker, counters, () =>
+      shopify.client.post("inventory_levels/set", {
+        data: {
+          location_id: Number(config.shopify.locationId),
+          inventory_item_id: createdVariant.inventory_item_id,
+          available: action.source.inventory,
+        },
+      }),
+    );
+
+    if (!inventoryResponse.ok) {
+      throw new Error(`Failed to update inventory for Shopify product ${action.identityKey}`);
+    }
+  }
+
   counters.created += 1;
-  return response.json();
+  return createdProduct;
 }
 
 function getExecutableUpdates(config, action, warnings) {
@@ -583,7 +700,7 @@ function getExecutableUpdates(config, action, warnings) {
   });
 }
 
-async function applyUpdate(config, action, counters, warnings) {
+async function applyUpdate(config, shopify, action, counters, warnings) {
   const allowedUpdates = getExecutableUpdates(config, action, warnings);
 
   if (allowedUpdates.length === 0) {
@@ -618,42 +735,24 @@ async function applyUpdate(config, action, counters, warnings) {
       },
     };
 
-    const { response, rateLimited } = await requestWithRetry(
-      `https://${config.shopify.storeDomain}/admin/api/${config.shopify.apiVersion}/products/${action.target.id}.json`,
-      {
-        method: "PUT",
-        headers: {
-          "X-Shopify-Access-Token": config.shopify.accessToken,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      },
-      config,
+    const response = await runShopifyRequest(shopify.tracker, counters, () =>
+      shopify.client.put(`products/${action.target.id}`, { data: payload }),
     );
-    counters.rateLimited += rateLimited;
     if (!response.ok) {
       throw new Error(`Failed to update Shopify product ${action.target.id}`);
     }
   }
 
   if (inventoryUpdate) {
-    const { response, rateLimited } = await requestWithRetry(
-      `https://${config.shopify.storeDomain}/admin/api/${config.shopify.apiVersion}/inventory_levels/set.json`,
-      {
-        method: "POST",
-        headers: {
-          "X-Shopify-Access-Token": config.shopify.accessToken,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+    const response = await runShopifyRequest(shopify.tracker, counters, () =>
+      shopify.client.post("inventory_levels/set", {
+        data: {
           location_id: Number(config.shopify.locationId),
           inventory_item_id: action.target.variant?.inventory_item_id,
           available: inventoryUpdate.to,
-        }),
-      },
-      config,
+        },
+      }),
     );
-    counters.rateLimited += rateLimited;
     if (!response.ok) {
       throw new Error(`Failed to update inventory for Shopify product ${action.target.id}`);
     }
@@ -799,6 +898,16 @@ function mergeDatasets(datasets) {
   return [...merged.values()];
 }
 
+function getPlanOptions(config) {
+  return {
+    allowCreates: config.scopes.includes("catalog"),
+    includeTitle: config.scopes.includes("catalog"),
+    includeHandle: config.scopes.includes("catalog"),
+    includePrice: config.scopes.includes("price"),
+    includeInventory: config.scopes.includes("inventory"),
+  };
+}
+
 function buildRunSummary(config, counters, warnings = [], errors = []) {
   return {
     dryRun: config.dryRun,
@@ -858,10 +967,11 @@ export async function runSync(options = {}) {
   try {
     const datasets = await loadSellviaDatasets(config, counters);
     const combinedProducts = mergeDatasets(datasets);
-    const shopifyProducts = await fetchAllShopifyProducts(config, counters);
+    const shopify = createShopifyRestClient(config);
+    const shopifyProducts = await fetchAllShopifyProducts(config, shopify, counters);
     counters.fetched += shopifyProducts.length;
 
-    const plan = planProductChanges(combinedProducts, shopifyProducts);
+    const plan = planProductChanges(combinedProducts, shopifyProducts, getPlanOptions(config));
     enforceMutationSafety(config, plan);
 
     for (const action of plan) {
@@ -871,10 +981,10 @@ export async function runSync(options = {}) {
           continue;
         }
         if (action.action === "create") {
-          await applyCreate(config, action, counters);
+          await applyCreate(config, shopify, action, counters, warnings);
           continue;
         }
-        await applyUpdate(config, action, counters, warnings);
+        await applyUpdate(config, shopify, action, counters, warnings);
       } catch (error) {
         counters.failed += 1;
         errors.push(`${action.identityKey}: ${error.message}`);
@@ -938,11 +1048,16 @@ export async function runSync(options = {}) {
     if (errors.length > 0) {
       const error = new Error(`Sync completed with ${errors.length} failure(s)`);
       error.summary = summary;
+      error.details = details;
+      error.alreadyReported = true;
       throw error;
     }
 
     return { summary, details, config };
   } catch (error) {
+    if (error?.alreadyReported) {
+      throw error;
+    }
     const summary = buildRunSummary(config, { ...counters, failed: counters.failed + 1 }, warnings, [...errors, error.message]);
     const details = {
       startedAt,

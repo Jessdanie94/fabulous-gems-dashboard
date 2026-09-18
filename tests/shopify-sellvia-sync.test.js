@@ -143,9 +143,78 @@ test("planProductChanges identifies creates and updates deterministically", () =
   assert.equal(plan[1].action, "create");
 });
 
+test("planProductChanges fails closed for ambiguous Shopify identities", () => {
+  assert.throws(
+    () =>
+      planProductChanges(
+        [{ sku: "RING-1", title: "Gold Ring" }],
+        [
+          {
+            id: 10,
+            title: "Gold Ring",
+            handle: "gold-ring",
+            tags: "",
+            variants: [{ id: 20, sku: "RING-1", price: "19.99", inventory_quantity: 5 }],
+          },
+          {
+            id: 11,
+            title: "Gold Ring Copy",
+            handle: "gold-ring-copy",
+            tags: "",
+            variants: [{ id: 21, sku: "RING-1", price: "19.99", inventory_quantity: 5 }],
+          },
+        ],
+      ),
+    /Ambiguous Shopify mapping detected for sku:ring-1/,
+  );
+});
+
+test("planProductChanges restricts updates to the selected scopes", () => {
+  const plan = planProductChanges(
+    [{ id: "sv-1", sku: "RING-1", title: "Gold Ring Deluxe", handle: "ring-1", price: "29.99", inventory: 8 }],
+    [
+      {
+        id: 10,
+        title: "Gold Ring",
+        handle: "gold-ring",
+        tags: "sellvia-id:sv-1",
+        variants: [{ id: 20, sku: "RING-1", price: "19.99", inventory_quantity: 5 }],
+      },
+    ],
+    {
+      allowCreates: false,
+      includeTitle: false,
+      includeHandle: false,
+      includePrice: false,
+      includeInventory: true,
+    },
+  );
+
+  assert.equal(plan[0].action, "update");
+  assert.deepEqual(plan[0].updates.map((update) => update.field), ["inventory"]);
+});
+
+test("planProductChanges disallows creates outside catalog scope", () => {
+  assert.throws(
+    () =>
+      planProductChanges(
+        [{ sku: "RING-2", inventory: 4 }],
+        [],
+        {
+          allowCreates: false,
+          includeTitle: false,
+          includeHandle: false,
+          includePrice: false,
+          includeInventory: true,
+        },
+      ),
+    /Catalog creation is disabled/,
+  );
+});
+
 test("planProductChanges fails closed for invalid external data", () => {
   assert.throws(
-    () => planProductChanges([{ title: "Broken", price: -1 }], []),
+    () => planProductChanges([{ sku: "BROKEN", title: "Broken", price: -1 }], []),
     /Invalid price value/,
   );
 });
@@ -170,6 +239,28 @@ test("requestWithRetry retries on rate limits and tracks counts", async () => {
     assert.equal(response.status, 200);
     assert.equal(usedAttempts, 2);
     assert.equal(rateLimited, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("requestWithRetry does not retry unsafe POST requests", async () => {
+  const originalFetch = global.fetch;
+  let attempts = 0;
+  global.fetch = async () => {
+    attempts += 1;
+    return new Response(JSON.stringify({ error: "temporary failure" }), { status: 503 });
+  };
+
+  try {
+    const { response, attempts: usedAttempts } = await requestWithRetry(
+      "https://example.com/products?token=secret",
+      { method: "POST" },
+      { maxRetries: 2, backoffMs: 0, timeoutMs: 1000 },
+    );
+    assert.equal(response.status, 503);
+    assert.equal(usedAttempts, 1);
+    assert.equal(attempts, 1);
   } finally {
     global.fetch = originalFetch;
   }
@@ -230,21 +321,170 @@ test("runSync produces dry-run summary and artifacts without writes", async () =
         scopes: ["catalog", "inventory", "price"],
         fetched: 5,
         created: 1,
-        updated: 1,
-        skipped: 0,
+        updated: 0,
+        skipped: 1,
         failed: 0,
         rateLimited: 0,
         warnings: [
           "Skipped price mutation for external:sv-1 because SYNC_ENABLE_PRICE_WRITES is false.",
           "Skipped inventory mutation for external:sv-1 because SYNC_ENABLE_INVENTORY_WRITES is false.",
+          "Deferred price on create for external:sv-2 because SYNC_ENABLE_PRICE_WRITES is false.",
+          "Deferred inventory on create for external:sv-2 because SYNC_ENABLE_INVENTORY_WRITES is false.",
         ],
         errors: [],
       });
 
       const summaryFile = JSON.parse(await fs.readFile(path.join(artifactsDir, "summary.json"), "utf8"));
       assert.equal(summaryFile.created, 1);
-      assert.equal(summaryFile.updated, 1);
+      assert.equal(summaryFile.updated, 0);
       assert.equal(summaryFile.dryRun, true);
     },
   );
+});
+
+test("runSync creates products without price writes and applies inventory separately", async () => {
+  const originalFetch = global.fetch;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sellvia-sync-create-"));
+  const sellviaProductsFile = path.join(tempDir, "sellvia-products.json");
+  const sellviaInventoryFile = path.join(tempDir, "sellvia-inventory.json");
+  const sellviaPricesFile = path.join(tempDir, "sellvia-prices.json");
+  const artifactsDir = path.join(tempDir, "artifacts");
+  const requests = [];
+
+  await fs.writeFile(
+    sellviaProductsFile,
+    JSON.stringify([{ id: "sv-2", sku: "RING-2", title: "Silver Ring", handle: "silver-ring", price: "14.99", inventory: 7 }]),
+  );
+  await fs.writeFile(
+    sellviaInventoryFile,
+    JSON.stringify([{ id: "sv-2", sku: "RING-2", inventory: 7 }]),
+  );
+  await fs.writeFile(
+    sellviaPricesFile,
+    JSON.stringify([{ id: "sv-2", sku: "RING-2", price: "14.99" }]),
+  );
+
+  global.fetch = async (url, init = {}) => {
+    requests.push({ url, init });
+
+    if (String(url).includes("/products.json?limit=250")) {
+      return new Response(JSON.stringify({ products: [] }), { status: 200, headers: { link: "" } });
+    }
+
+    if (String(url).includes("/products.json")) {
+      return new Response(
+        JSON.stringify({ product: { id: 10, variants: [{ id: 20, inventory_item_id: 30 }] } }),
+        { status: 201 },
+      );
+    }
+
+    if (String(url).includes("/inventory_levels/set.json")) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  try {
+    await withEnv(
+      {
+        SHOPIFY_STORE_DOMAIN: "example.myshopify.com",
+        SHOPIFY_API_TOKEN: "shopify-token",
+        SELLVIA_MASTER_KEY: "sellvia-token",
+        SELLVIA_PRODUCTS_FILE: sellviaProductsFile,
+        SELLVIA_INVENTORY_FILE: sellviaInventoryFile,
+        SELLVIA_PRICES_FILE: sellviaPricesFile,
+        SYNC_ARTIFACTS_DIR: artifactsDir,
+        SYNC_ENABLE_WRITES: "true",
+        SYNC_ENABLE_PRICE_WRITES: "false",
+        SYNC_ENABLE_INVENTORY_WRITES: "true",
+        SYNC_APPROVE_BULK_CHANGES: "true",
+        SHOPIFY_LOCATION_ID: "123",
+      },
+      async () => {
+        const result = await runSync({ dryRun: "false", scope: "catalog,inventory,price" });
+        assert.equal(result.summary.created, 1);
+        assert.equal(result.summary.failed, 0);
+      },
+    );
+
+    const createRequest = requests.find(
+      ({ url, init }) => String(url).endsWith("/products.json") && (init.method || "GET") === "POST",
+    );
+    const inventoryRequest = requests.find(({ url }) => String(url).includes("/inventory_levels/set.json"));
+
+    assert.ok(createRequest);
+    assert.ok(inventoryRequest);
+
+    const createBody = JSON.parse(createRequest.init.body);
+    assert.equal(createBody.product.variants[0].sku, "RING-2");
+    assert.equal("price" in createBody.product.variants[0], false);
+    assert.equal(createBody.product.variants[0].inventory_management, "shopify");
+
+    const inventoryBody = JSON.parse(inventoryRequest.init.body);
+    assert.equal(inventoryBody.available, 7);
+    assert.equal(inventoryBody.location_id, 123);
+    assert.equal(inventoryBody.inventory_item_id, 30);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("runSync preserves action artifacts after per-action failures", async () => {
+  const originalFetch = global.fetch;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sellvia-sync-failure-"));
+  const sellviaProductsFile = path.join(tempDir, "sellvia-products.json");
+  const artifactsDir = path.join(tempDir, "artifacts");
+  let createAttempts = 0;
+
+  await fs.writeFile(
+    sellviaProductsFile,
+    JSON.stringify([{ id: "sv-2", sku: "RING-2", title: "Silver Ring", handle: "silver-ring", price: "14.99" }]),
+  );
+
+  global.fetch = async (url) => {
+    if (String(url).includes("/products.json?limit=250")) {
+      return new Response(JSON.stringify({ products: [] }), { status: 200, headers: { link: "" } });
+    }
+
+    if (String(url).includes("/products.json")) {
+      createAttempts += 1;
+      return new Response(JSON.stringify({ error: "temporary failure" }), { status: 503 });
+    }
+
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  try {
+    await withEnv(
+      {
+        SHOPIFY_STORE_DOMAIN: "example.myshopify.com",
+        SHOPIFY_API_TOKEN: "shopify-token",
+        SELLVIA_MASTER_KEY: "sellvia-token",
+        SELLVIA_PRODUCTS_FILE: sellviaProductsFile,
+        SYNC_ARTIFACTS_DIR: artifactsDir,
+        SYNC_ENABLE_WRITES: "true",
+        SYNC_APPROVE_BULK_CHANGES: "true",
+      },
+      async () => {
+        await assert.rejects(
+          () => runSync({ dryRun: "false", scope: "catalog" }),
+          (error) => {
+            assert.equal(error.summary.failed, 1);
+            assert.equal(error.summary.errors[0], "external:sv-2: Failed to create Shopify product for external:sv-2");
+            return true;
+          },
+        );
+      },
+    );
+
+    assert.equal(createAttempts, 1);
+
+    const detailsFile = JSON.parse(await fs.readFile(path.join(artifactsDir, "details.json"), "utf8"));
+    assert.equal(detailsFile.fatal, undefined);
+    assert.equal(detailsFile.actions.length, 1);
+    assert.equal(detailsFile.actions[0].action, "create");
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
