@@ -11,7 +11,6 @@ module.exports = {
     jest: {
       version: 29,
     },
-
    },
   globals: {
     shopify: "readonly",
