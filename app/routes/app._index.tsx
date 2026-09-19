@@ -16,10 +16,8 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getDashboardData } from "../services/sellvia.server";
-import {
-  getShopifyPayouts,
-  formatPayoutRows,
-} from "../services/shopify-finances.server";
+import { getShopifyPayouts } from "../services/shopify-finances.server";
+import { formatPayoutRows } from "../services/shopify-finances";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);

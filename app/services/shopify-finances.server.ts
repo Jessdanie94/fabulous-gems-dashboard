@@ -11,17 +11,9 @@ interface ShopifyPayout {
   status: string;
   amount: {
     amount: string;
-    currency_code: string;
+    currencyCode: string;
   };
-  issued_at: string;
-}
-
-interface PayoutResponse {
-  payouts: {
-    edges: Array<{
-      node: ShopifyPayout;
-    }>;
-  };
+  issuedAt: string;
 }
 
 /**
@@ -56,7 +48,7 @@ export async function getShopifyPayouts(request: LoaderFunctionArgs["request"]) 
       }
     `;
 
-    const response = await admin.graphql(query);
+    const response = await (admin as { graphql: (query: string) => Promise<Response> }).graphql(query);
     const data = (await response.json()) as {
       data: {
         shopPaymentAccount: {
@@ -100,22 +92,4 @@ export async function getShopifyPayouts(request: LoaderFunctionArgs["request"]) 
     console.error("Error fetching Shopify payouts:", error);
     throw error;
   }
-}
-
-/**
- * Format payout data for DataTable display
- */
-export function formatPayoutRows(
-  payouts: Array<{
-    status: string;
-    amount: string;
-    currency: string;
-    issuedAt: string;
-  }>
-) {
-  return payouts.map((payout) => [
-    payout.status.charAt(0).toUpperCase() + payout.status.slice(1),
-    `${payout.currency} $${parseFloat(payout.amount).toFixed(2)}`,
-    new Date(payout.issuedAt).toLocaleDateString(),
-  ]);
 }
