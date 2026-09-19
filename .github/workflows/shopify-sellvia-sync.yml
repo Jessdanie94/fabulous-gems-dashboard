@@ -76,7 +76,7 @@ jobs:
       SYNC_APPROVE_BULK_CHANGES: ${{ github.event_name == 'schedule' && 'false' || inputs.approve_bulk_changes && 'true' || 'false' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Preflight - validate required secrets
         shell: bash
