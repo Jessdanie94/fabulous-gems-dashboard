@@ -4,6 +4,11 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 /**
  * Shopify Finances API Service
  * Fetches payout data from Shopify Payments
+ *
+ * NOTE: `payouts` must be nested inside `shopPaymentAccount` in the GraphQL query.
+ * Placing it at the top level returns null / empty, which is why the dashboard
+ * was showing $0.00. The correct schema is:
+ *   shopPaymentAccount { balance { ... }  payouts(first: N) { edges { node { ... } } } }
  */
 
 interface ShopifyPayout {
@@ -11,27 +16,22 @@ interface ShopifyPayout {
   status: string;
   amount: {
     amount: string;
-    currency_code: string;
+    currencyCode: string;
   };
-  issued_at: string;
-}
-
-interface PayoutResponse {
-  payouts: {
-    edges: Array<{
-      node: ShopifyPayout;
-    }>;
-  };
+  issuedAt: string;
 }
 
 /**
- * Get pending balance and recent payouts from Shopify Payments
+ * Get pending balance and recent payouts from Shopify Payments.
+ * Requires the `read_finances` scope on the app.
  */
 export async function getShopifyPayouts(request: LoaderFunctionArgs["request"]) {
   try {
     const admin = await authenticate.admin(request);
 
-    // GraphQL query to fetch payouts and balance
+    // `payouts` lives inside `shopPaymentAccount`, NOT at the query root.
+    // Top-level `payouts` is undefined in the Admin GraphQL schema and silently
+    // returns null, which caused the $0.00 balance bug.
     const query = `
       {
         shopPaymentAccount {
@@ -39,17 +39,17 @@ export async function getShopifyPayouts(request: LoaderFunctionArgs["request"]) 
             amount
             currencyCode
           }
-        }
-        payouts(first: 10, reverse: true) {
-          edges {
-            node {
-              id
-              status
-              amount {
-                amount
-                currencyCode
+          payouts(first: 10, reverse: true) {
+            edges {
+              node {
+                id
+                status
+                amount {
+                  amount
+                  currencyCode
+                }
+                issuedAt
               }
-              issuedAt
             }
           }
         }
@@ -64,12 +64,12 @@ export async function getShopifyPayouts(request: LoaderFunctionArgs["request"]) 
             amount: string;
             currencyCode: string;
           };
-        };
-        payouts: {
-          edges: Array<{
-            node: ShopifyPayout;
-          }>;
-        };
+          payouts: {
+            edges: Array<{
+              node: ShopifyPayout;
+            }>;
+          };
+        } | null;
       };
     };
 
@@ -77,11 +77,13 @@ export async function getShopifyPayouts(request: LoaderFunctionArgs["request"]) 
       throw new Error("Invalid response from Shopify API");
     }
 
-    const balance = data.data.shopPaymentAccount?.balance || {
+    // shopPaymentAccount is null when the store has not enabled Shopify Payments
+    const account = data.data.shopPaymentAccount;
+    const balance = account?.balance ?? {
       amount: "0.00",
       currencyCode: "USD",
     };
-    const payouts = data.data.payouts?.edges || [];
+    const payouts = account?.payouts?.edges ?? [];
 
     return {
       balance: {
@@ -95,6 +97,8 @@ export async function getShopifyPayouts(request: LoaderFunctionArgs["request"]) 
         currency: edge.node.amount.currencyCode,
         issuedAt: edge.node.issuedAt,
       })),
+      // Surface whether Shopify Payments is actually enabled on this store
+      paymentsEnabled: account !== null,
     };
   } catch (error) {
     console.error("Error fetching Shopify payouts:", error);
