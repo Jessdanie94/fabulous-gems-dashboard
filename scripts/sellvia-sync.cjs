@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * scripts/sellvia-sync.js
+ * scripts/sellvia-sync.cjs
+ *
+ * LEGACY / DEPRECATED: superseded by `npm run sync:shopify-sellvia`
+ * (src/shopify-sellvia-sync.js), which is what the scheduled workflow runs.
+ * Known limitation: Shopify inventory_levels do not carry SKUs, so SKU matching
+ * below will skip every item. Kept only for reference.
  *
  * Standalone Sellvia inventory sync script.
  * Called by the `sync:sellvia` npm script, which in turn is invoked by
@@ -15,13 +20,14 @@
 
 const https = require('https');
 
-const SELLVIA_BASE_URL = 'api.sellvia.com';
-const SELLVIA_KEY = process.env.SELLVIA_MASTER_KEY;
-const SHOPIFY_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN;
+const SELLVIA_BASE_URL = (process.env.SELLVIA_API_BASE_URL || 'https://api.sellvia.com').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+const API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
+const SELLVIA_KEY = process.env.SELLVIA_API_KEY || process.env.SELLVIA_MASTER_KEY;
+const SHOPIFY_DOMAIN = process.env.SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_DOMAIN;
 const SHOPIFY_TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 
 if (!SELLVIA_KEY) {
-  console.error('ERROR: SELLVIA_MASTER_KEY is not set');
+  console.error('ERROR: SELLVIA_API_KEY (or SELLVIA_MASTER_KEY) is not set');
   process.exit(1);
 }
 if (!SHOPIFY_DOMAIN || !SHOPIFY_TOKEN) {
@@ -82,7 +88,7 @@ async function fetchShopifyInventory() {
   const hostname = SHOPIFY_DOMAIN.replace('https://', '');
   const res = await request(
     hostname,
-    '/admin/api/2024-01/inventory_levels.json?limit=250',
+    `/admin/api/${API_VERSION}/inventory_levels.json?limit=250`,
     'GET',
     {
       'X-Shopify-Access-Token': SHOPIFY_TOKEN,
@@ -143,7 +149,7 @@ async function runSync() {
     // Adjust inventory to match Sellvia stock
     const res = await request(
       hostname,
-      '/admin/api/2024-01/inventory_levels/set.json',
+      `/admin/api/${API_VERSION}/inventory_levels/set.json`,
       'POST',
       {
         'X-Shopify-Access-Token': SHOPIFY_TOKEN,
