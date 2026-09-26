@@ -12,12 +12,17 @@
     "start": "remix-serve ./build/server/index.js",
     "docker-start": "npm run setup && npm run start",
     "setup": "prisma generate && prisma migrate deploy",
-    "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
+    "lint": "eslint --ext .js,.cjs,.mjs --cache --cache-location ./node_modules/.cache/eslint .",
     "shopify": "shopify",
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "sync:shopify-sellvia": "node shopify-sellvia-sync.js"
+    "sync:shopify-sellvia": "node shopify-sellvia-sync.js",
+    "sync:sellvia": "node scripts/sellvia-sync.cjs",
+    "server:legacy": "node server.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.js && vitest run .test.ts -t \"^(?!Integration: Dashboard Route File)\"",
+    "test:spec": "vitest run .test.ts -t \"Integration: Dashboard Route File\""
   },
   "type": "module",
   "engines": {
@@ -30,10 +35,15 @@
     "@remix-run/node": "^2.16.1",
     "@remix-run/react": "^2.16.1",
     "@remix-run/serve": "^2.16.1",
+    "@shopify/admin-api-client": "^1.1.1",
     "@shopify/app-bridge-react": "^4.1.6",
     "@shopify/polaris": "^12.0.0",
     "@shopify/shopify-app-remix": "^4.1.0",
     "@shopify/shopify-app-session-storage-prisma": "^8.0.0",
+    "axios": "^1.12.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^4.21.2",
     "isbot": "^5.1.0",
     "prisma": "^6.2.1",
     "react": "^18.2.0",
@@ -52,7 +62,8 @@
     "eslint-config-prettier": "^10.0.1",
     "prettier": "^3.2.4",
     "typescript": "^5.2.2",
-    "vite": "^6.2.2"
+    "vite": "^6.2.2",
+    "vitest": "^3.2.4"
   },
   "workspaces": {
     "packages": [

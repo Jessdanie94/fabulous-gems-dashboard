@@ -1,0 +1,48 @@
+name: Sync package-lock.json
+
+# Generates/refreshes package-lock.json whenever package.json changes and
+# commits it back, so `npm ci` in CI and on Render always has a lockfile.
+on:
+  push:
+    paths:
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lockfile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lockfile:
+    # Dependabot maintains the lockfile itself on its own branches
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+
+      - name: Generate lockfile
+        run: npm install --package-lock-only --no-audit --no-fund
+
+      - name: Verify lockfile installs cleanly
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Commit lockfile if changed
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if git diff --quiet -- package-lock.json && git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
+            echo "package-lock.json already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: update package-lock.json"
+          git push origin "HEAD:$REF_NAME"

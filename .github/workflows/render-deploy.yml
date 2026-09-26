@@ -1,18 +1,30 @@
-name: Deploy to Render
+name: Deploy to Render (manual)
 
+# Automatic deploys on push to main are handled by ci-cd.yml (after build + tests pass).
+# This workflow is for manual redeploys only, so a push never triggers two deploys.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Render
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_DEPLOY_KEY: ${{ secrets.RENDER_DEPLOY_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
         run: |
-          curl https://api.render.com/deploy/srv-${{ secrets.RENDER_SERVICE_ID }}?key=${{ secrets.RENDER_DEPLOY_KEY }}
-        if: ${{ secrets.RENDER_SERVICE_ID && secrets.RENDER_DEPLOY_KEY }}
-      
-      - name: Deployment Notice
-        run: echo "Deploy webhook triggered for Render service"
+          HOOK="$RENDER_DEPLOY_HOOK_URL"
+          if [ -z "$HOOK" ] && [ -n "$RENDER_SERVICE_ID" ] && [ -n "$RENDER_DEPLOY_KEY" ]; then
+            HOOK="https://api.render.com/deploy/srv-${RENDER_SERVICE_ID#srv-}?key=${RENDER_DEPLOY_KEY}"
+          fi
+          if [ -z "$HOOK" ]; then
+            echo "::error::Set RENDER_DEPLOY_HOOK_URL (or RENDER_SERVICE_ID + RENDER_DEPLOY_KEY) in repo secrets."
+            exit 1
+          fi
+          curl --fail --silent --show-error -X POST "$HOOK" > /dev/null
+          echo "Deploy hook triggered for Render service"
