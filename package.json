@@ -16,9 +16,7 @@
     "shopify": "shopify",
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
-    "vite": "vite",
-    "sync:sellvia": "node scripts/sellvia-sync.js",
-    "sync:shopify": "node scripts/sellvia-sync.js"
+    "vite": "vite"
   },
   "type": "module",
   "engines": {
