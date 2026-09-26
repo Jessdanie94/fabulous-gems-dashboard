@@ -6,12 +6,13 @@
 require('dotenv').config();
 const https = require('https');
 
-const STORE_DOMAIN = process.env.SHOPIFY_STORE1_DOMAIN;
-const TOKEN = process.env.SHOPIFY_STORE1_TOKEN;
+const STORE_DOMAIN = (process.env.SHOPIFY_STORE_URL || process.env.SHOPIFY_STORE_DOMAIN || process.env.SHOPIFY_STORE1_DOMAIN || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+const TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || process.env.SHOPIFY_ACCESS_TOKEN || process.env.SHOPIFY_STORE1_TOKEN;
+const API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
 const APP_URL = process.env.SHOPIFY_APP_URL || 'https://fabulousgemsparlor-store.onrender.com';
 
 if (!STORE_DOMAIN || !TOKEN) {
-  console.error('❌ SHOPIFY_STORE1_DOMAIN or SHOPIFY_STORE1_TOKEN not set');
+  console.error('❌ Store domain or admin token not set (SHOPIFY_STORE_URL / SHOPIFY_ADMIN_ACCESS_TOKEN)');
   process.exit(1);
 }
 
@@ -19,7 +20,7 @@ function shopifyPost(path, body) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
     const options = {
-      hostname: STORE_DOMAIN.replace('https://', ''),
+      hostname: STORE_DOMAIN,
       path,
       method: 'POST',
       headers: {
@@ -52,7 +53,7 @@ const WEBHOOKS = [
 
   for (const wh of WEBHOOKS) {
     console.log(`Registering webhook: ${wh.name}...`);
-    const res = await shopifyPost('/admin/api/2024-01/webhooks.json', {
+    const res = await shopifyPost(`/admin/api/${API_VERSION}/webhooks.json`, {
       webhook: { topic: wh.topic, address: wh.address, format: 'json' },
     });
     if (res.status === 201) {

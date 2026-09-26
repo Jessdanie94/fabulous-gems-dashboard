@@ -37,7 +37,7 @@ function shopifyGet(domain, token, path) {
     if (!store.domain || !store.token) continue;
     console.log(`Checking ${store.name} (${store.domain})...`);
     try {
-      const shopData = await shopifyGet(store.domain, store.token, '/admin/api/2024-01/shop.json');
+      const shopData = await shopifyGet(store.domain, store.token, `/admin/api/${process.env.SHOPIFY_API_VERSION || '2026-07'}/shop.json`);
       if (!shopData) { console.log(`  ❌ Could not connect\n`); continue; }
       const shopId = String(shopData.shop.id);
       if (BILLING_IDS.includes(shopId)) {

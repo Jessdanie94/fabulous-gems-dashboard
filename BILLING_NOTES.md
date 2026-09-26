@@ -8,7 +8,7 @@ possibly duplicate active billing plans.
 ## Finding
 
 These IDs are **Shopify store IDs**, not recurring application charge IDs.
-`who-charged-me.js` was written to identify *which store* was generating a charge
+`who-charged-me.cjs` was written to identify *which store* was generating a charge
 by matching a store's numeric ID against those two values — not to cancel charges.
 
 The IDs were associated with two of the original three stores in the dashboard.
@@ -31,5 +31,5 @@ No programmatic action is possible or needed from this codebase. To confirm:
 4. If either removed store still shows an active charge, cancel it manually from
    the Partners dashboard or ask Shopify Support.
 
-The `who-charged-me.js` script can be updated to reference only the single
+The `who-charged-me.cjs` script can be updated to reference only the single
 remaining store if needed in future diagnostics.

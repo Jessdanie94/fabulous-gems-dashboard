@@ -15,7 +15,7 @@ function checkStore(store) {
     }
     const options = {
       hostname: store.domain.replace('https://', '').replace('/', ''),
-      path: '/admin/api/2024-01/shop.json',
+      path: `/admin/api/${process.env.SHOPIFY_API_VERSION || '2026-07'}/shop.json`,
       method: 'GET',
       headers: { 'X-Shopify-Access-Token': store.token, 'Content-Type': 'application/json' },
     };
