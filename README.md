@@ -54,8 +54,25 @@ Create a `.env` file in the root directory:
 SHOPIFY_API_KEY=your_shopify_api_key
 SHOPIFY_API_SECRET=your_shopify_api_secret
 SHOPIFY_APP_URL=https://your-app-url.onrender.com
-SCOPES=read_orders,write_orders,read_products,read_finances
-SELLVIA_MASTER_KEY=your_sellvia_master_key
+SCOPES=read_orders,read_products,read_finances
+SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
+SHOPIFY_API_TOKEN=your_shopify_admin_access_token_here
+SHOPIFY_ADMIN_ACCESS_TOKEN=your_shopify_admin_access_token_here
+SHOPIFY_LOCATION_ID=your_shopify_location_id_here
+SELLVIA_MASTER_KEY=your_sellvia_master_key_here
+SELLVIA_API_KEY=your_sellvia_api_key_here
+SELLVIA_API_BASE_URL=https://api.sellvia.com
+SELLVIA_PRODUCTS_URL=https://sellvia.example.com/catalog/products
+SELLVIA_INVENTORY_URL=https://sellvia.example.com/catalog/inventory
+SELLVIA_PRICES_URL=https://sellvia.example.com/catalog/prices
+SELLVIA_ORDERS_URL=https://sellvia.example.com/orders
+SYNC_DRY_RUN=true
+SYNC_SCOPE=catalog,inventory,price
+SYNC_ENABLE_WRITES=false
+SYNC_ENABLE_PRICE_WRITES=false
+SYNC_ENABLE_INVENTORY_WRITES=false
+SYNC_ENABLE_ORDER_WRITES=false
+SYNC_APPROVE_BULK_CHANGES=false
 ```
 
 **Environment Variable Details:**
@@ -63,12 +80,17 @@ SELLVIA_MASTER_KEY=your_sellvia_master_key
 - `SHOPIFY_API_KEY` - Found in your Shopify Partner dashboard
 - `SHOPIFY_API_SECRET` - Found in your Shopify Partner dashboard
 - `SHOPIFY_APP_URL` - Your app's deployment URL
-- `SCOPES` - Required permissions for the app
+- `SCOPES` - Required permissions for the embedded app UI
   - `read_orders` - View orders
-  - `write_orders` - Modify orders
   - `read_products` - View products
   - `read_finances` - Access payout and balance data
-- `SELLVIA_MASTER_KEY` - Your Sellvia API master key for analytics
+- `SHOPIFY_STORE_DOMAIN` - Store domain for autonomous sync runs
+- `SHOPIFY_API_TOKEN` / `SHOPIFY_ADMIN_ACCESS_TOKEN` - Admin API token used by the sync workflow (`SHOPIFY_API_TOKEN` is the legacy alias)
+- `SHOPIFY_LOCATION_ID` - Required before inventory write mode is enabled
+- `SELLVIA_MASTER_KEY` / `SELLVIA_API_KEY` - Sellvia credential used by the dashboard and sync adapter
+- `SELLVIA_PRODUCTS_URL`, `SELLVIA_INVENTORY_URL`, `SELLVIA_PRICES_URL` - Account-specific Sellvia feed endpoints for product, stock, and price data
+- `SELLVIA_ORDERS_URL` - Optional order feed endpoint; order writes stay disabled until the contract is validated
+- `SYNC_*` flags - Safety controls for dry runs, write enablement, and bulk approval
 
 ### 3. Set Up Database
 
@@ -146,6 +168,103 @@ fabulous-gems-dashboard/
 ├── package.json
 └── vite.config.ts
 ```
+
+## Autonomous Shopify + Sellvia Sync
+
+The repository now includes a production-safe sync control plane driven by `node shopify-sellvia-sync.js` and the GitHub Actions workflow at `.github/workflows/shopify-sellvia-sync.yml`.
+
+### Architecture and Data Flow
+
+1. GitHub Actions triggers the sync every 30 minutes or on manual dispatch.
+2. The workflow validates required secrets without printing them.
+3. `check-stores.js` loads `.env` locally when present, then delegates to `src/shopify-sellvia-sync.js`.
+4. The sync adapter reads Sellvia catalog/inventory/price feeds from account-specific URLs or local fixture files.
+5. Shopify products are fetched via the Admin REST API with pagination and bounded retries.
+6. Products are mapped deterministically by `sellvia-id:{externalId}` tag, then SKU, then handle.
+7. The sync computes an idempotent plan, writes only when explicit safety flags are enabled, and never performs destructive deletes.
+8. Each run writes `summary.json`, `details.json`, and `summary.md` into `artifacts/shopify-sellvia-sync/` for auditability and troubleshooting.
+
+### Conflict Policy and Safety Controls
+
+- **Fail closed** when required credentials, source endpoints, or identity fields are missing.
+- **No destructive deletes** are implemented.
+- **Dry-run is the default** for scheduled runs.
+- **Writes require explicit opt-in** using `SYNC_ENABLE_WRITES=true`.
+- **Price writes** additionally require `SYNC_ENABLE_PRICE_WRITES=true`.
+- **Inventory writes** additionally require `SYNC_ENABLE_INVENTORY_WRITES=true` and `SHOPIFY_LOCATION_ID`.
+- **Bulk or high-risk mutations** require `SYNC_APPROVE_BULK_CHANGES=true`.
+- **Order writes remain disabled by default** until the Sellvia order contract and required Shopify scopes are verified.
+- Logs and artifacts only contain summary metadata; tokens and customer/order payloads are intentionally excluded.
+
+### Required Secrets and Permissions
+
+Configure these as **GitHub Actions secrets** for autonomous runs:
+
+- `SHOPIFY_STORE_DOMAIN`
+- `SHOPIFY_API_TOKEN` or `SHOPIFY_ADMIN_ACCESS_TOKEN`
+- `SELLVIA_MASTER_KEY` or `SELLVIA_API_KEY`
+- `SELLVIA_PRODUCTS_URL`
+- `SELLVIA_INVENTORY_URL`
+- `SELLVIA_PRICES_URL`
+
+Optional but supported:
+
+- `SHOPIFY_LOCATION_ID` (required for inventory writes)
+- `SELLVIA_API_BASE_URL`
+- `SELLVIA_ORDERS_URL`
+- `SYNC_FAILURE_WEBHOOK_URL`
+
+Recommended Shopify Admin API scopes for write mode are `read_products`, `write_products`, and inventory-related scopes required by your token issuer. Keep order scopes read-only until order reconciliation is contract-tested for your account.
+
+### Exact Setup Steps
+
+1. Add the required GitHub Actions secrets listed above.
+2. Confirm the Sellvia product, inventory, and pricing feeds return stable identifiers (`externalId`/`id`, `sku`, or `handle`).
+3. Run a **manual** workflow dispatch with `dry_run=true` and `scope=all` (or `catalog,inventory,price`).
+4. Review the workflow summary plus `artifacts/shopify-sellvia-sync/*`.
+5. Resolve any identity conflicts or missing mappings before enabling writes.
+6. Enable `SYNC_ENABLE_WRITES=true` only after the dry-run plan is stable.
+7. Enable `SYNC_ENABLE_PRICE_WRITES=true` and/or `SYNC_ENABLE_INVENTORY_WRITES=true` separately when those mutations have been validated.
+
+### Workflow Inputs and Operation
+
+Manual `workflow_dispatch` supports:
+
+- `dry_run` - boolean; leave `true` until the write plan is proven safe.
+- `scope` - one of `all`, `catalog`, `inventory`, `price`, `orders`, or `catalog,inventory,price`.
+
+Scheduled runs execute every 30 minutes with `SYNC_DRY_RUN=true` by default.
+
+### Dry-Run to Write-Mode Promotion Procedure
+
+1. Start with scheduled dry-run only.
+2. Run multiple manual dry-runs and verify `created`, `updated`, `skipped`, `failed`, and `rateLimited` counts.
+3. Confirm that mapped Shopify products carry the expected `sellvia-id:{externalId}` tag or stable SKU/handle match.
+4. Enable `SYNC_ENABLE_WRITES=true` for controlled catalog creation/title updates.
+5. Separately enable `SYNC_ENABLE_PRICE_WRITES=true` and `SYNC_ENABLE_INVENTORY_WRITES=true` only after reviewing the dry-run diff.
+6. Keep `SYNC_APPROVE_BULK_CHANGES=false` until you intentionally approve larger mutation batches.
+
+### Rollback and Recovery
+
+- Disable the workflow or revert the write-enable secrets to `false` to stop further mutations.
+- Re-run the workflow in dry-run mode to inspect the next idempotent plan.
+- Use `artifacts/shopify-sellvia-sync/details.json` from the last failing run to identify the affected products.
+- Correct Sellvia feed data or Shopify product identity tags/SKUs, then rerun.
+- Because deletes are not automated, rollback is limited to targeted corrective updates instead of destructive bulk actions.
+
+### API Assumptions and Unresolved Account-Specific Details
+
+- Sellvia product, inventory, price, and order feeds are **account-specific** and must be supplied through environment variables.
+- The sync expects each Sellvia record to expose at least one stable identity field: `externalId`/`id`, `sku`, or `handle`.
+- Order synchronization is intentionally kept read-only/disabled until the repository has a confirmed Sellvia order schema and the necessary Shopify credentials/scopes.
+- If Sellvia exposes a different payload shape, adapt the normalization boundary in `src/shopify-sellvia-sync.js` instead of bypassing the safety checks.
+
+### Monitoring, Alerting, and Audit Logs
+
+- Every run publishes a GitHub job summary with fetched/created/updated/skipped/failed/rate-limited counts.
+- On failure, the workflow uploads `summary.json`, `details.json`, and `summary.md` as artifacts.
+- When `SYNC_FAILURE_WEBHOOK_URL` is configured, the failure summary is POSTed to that webhook.
+- Local dry-run validation can use `SHOPIFY_PRODUCTS_FILE` plus `SELLVIA_*_FILE` inputs to simulate feeds without live credentials.
 
 ## API Services
 
@@ -244,6 +363,7 @@ npm run shopify           # Shopify CLI commands
 npm run prisma            # Prisma CLI commands
 npm run graphql-codegen   # Generate GraphQL types
 npm run vite              # Vite CLI commands
+npm run sync:shopify-sellvia  # Run the autonomous Shopify + Sellvia sync entry point
 ```
 
 ## Resources
