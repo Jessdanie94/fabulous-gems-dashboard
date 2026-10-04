@@ -1,6 +1,6 @@
 /**
  * import-flows.cjs
- * Registers all 4 Shopify webhooks for STORE1 and wires up the autonomy flows.
+ * Registers the dead-store webhook for STORE1. Paid orders go to the Render bridge.
  * Run once after deployment: node import-flows.cjs
  */
 require('dotenv').config();
@@ -41,9 +41,7 @@ function shopifyPost(path, body) {
 }
 
 const WEBHOOKS = [
-  { name: 'FLOW_2: Auto Fulfill Sellvia', topic: 'orders/paid', address: `${APP_URL}/api/auto-fulfill` },
   { name: 'FLOW_3: Tag Dead Store Orders', topic: 'orders/create', address: `${APP_URL}/api/tag-dead-store-orders` },
-  { name: 'FLOW_4: Pause on Zero Inventory', topic: 'inventory_levels/update', address: `${APP_URL}/api/pause-on-zero-inventory` },
 ];
 
 (async () => {
@@ -65,6 +63,5 @@ const WEBHOOKS = [
     }
   }
 
-  console.log('\n✅ FLOW_1 (Circuit Breaker) runs via POST /api/circuit-breaker — schedule via Render cron.');
-  console.log('\n✅ All flows imported. Run check-stores.cjs to verify STORE1 is fully live.\n');
+  console.log('\n✅ Dead-store webhook imported. Register orders/paid with the Render bridge separately.\n');
 })();
