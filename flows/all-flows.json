@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "store": "ppd1xp-1c.myshopify.com",
+  "flows": [
+    {
+      "id": "flow_2_auto_fulfill",
+      "title": "FLOW_2: Queue Paid Order for Sellvia App",
+      "trigger": {
+        "type": "shopify_webhook",
+        "topic": "orders/paid",
+        "description": "Paid-order webhook received by Render bridge"
+      },
+      "action": {
+        "type": "http_request",
+        "endpoint": "/api/auto-fulfill",
+        "method": "POST",
+        "body": "original raw Shopify webhook body and X-Shopify-Hmac-Sha256 header",
+        "description": "Tag the paid order as sellvia-queued in Shopify; Sellvia official app handles fulfillment"
+      }
+    },
+    {
+      "id": "flow_3_tag_dead_store_orders",
+      "title": "FLOW_3: Tag Duplicate Orders from Closed Stores",
+      "trigger": {
+        "type": "shopify_webhook",
+        "topic": "orders/create",
+        "description": "Fires on every new order"
+      },
+      "condition": {
+        "description": "Source matches closed store IDs 5809673777 or 574805867"
+      },
+      "action": {
+        "type": "http_request",
+        "endpoint": "/api/tag-dead-store-orders",
+        "method": "POST",
+        "body": "{{ order }}",
+        "description": "Tag order as dead-store-duplicate for review"
+      }
+    }
+  ]
+}

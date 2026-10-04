@@ -20,13 +20,15 @@ jobs:
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);
 
-            const { data: issues } = await github.rest.issues.listForRepo( {
+            const { data: all } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
               since: yesterday.toISOString(),
               per_page: 50
             });
+            // listForRepo also returns pull requests; keep real issues only
+            const issues = all.filter(i => !i.pull_request);
 
             if (issues.length === 0) {
               console.log('No new issues in the last 24 hours.');
@@ -34,7 +36,7 @@ jobs:
             }
 
             const lines = issues.map(i =>
-              `#${i.umber}: ${i.title} (opened by @${i.user.login})`
+              `#${i.number}: ${i.title} (opened by @${i.user.login})`
             ).join('\n');
 
             const today = new Date().toISOString().slice(0, 10);

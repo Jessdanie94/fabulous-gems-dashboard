@@ -13,15 +13,24 @@ database.sqlite
 
 .env
 .env.*
+!.env.example
 
-package-lock.json
+# npm is the package manager for this repo: package-lock.json MUST be committed (npm ci)
 yarn.lock
 pnpm-lock.yaml
 
 /extensions/*/dist
 
 # Ignore shopify files created during app dev
-.shopify/*
+.shopify/
 .shopify.lock
 
 /artifacts
+
+# Logs / editor
+*.log
+npm-debug.log*
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/mcp.json

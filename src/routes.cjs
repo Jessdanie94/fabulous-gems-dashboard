@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getOrders, getProducts } = require('../jdv-core-orchestrator');
+const { getOrders, getProducts } = require('../jdv-core-orchestrator.cjs');
 
 router.get('/orders', async (req, res) => {
   try {

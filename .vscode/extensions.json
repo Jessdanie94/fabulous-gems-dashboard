@@ -1,6 +1,11 @@
 {
   "recommendations": [
+    "Shopify.theme-check-vscode",
     "graphql.vscode-graphql",
     "shopify.polaris-for-vscode",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "github.vscode-github-actions",
+    "redhat.vscode-yaml"
   ]
 }

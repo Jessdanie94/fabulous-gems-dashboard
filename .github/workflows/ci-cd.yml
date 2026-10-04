@@ -58,7 +58,7 @@ jobs:
         run: npm run setup
       
       - name: Run tests
-        run: npm run test 2>/dev/null || echo "No tests configured"
+        run: npm test
 
   deploy:
     runs-on: ubuntu-latest
@@ -70,21 +70,25 @@ jobs:
       
       - name: Deploy to Render
         env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
           RENDER_DEPLOY_KEY: ${{ secrets.RENDER_DEPLOY_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
         run: |
-          if [ -z "$RENDER_DEPLOY_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
-            echo "⚠️  Render secrets not configured. Skipping deployment."
-            echo "Configure RENDER_DEPLOY_KEY and RENDER_SERVICE_ID in GitHub secrets to enable auto-deploy."
+          # Preferred: RENDER_DEPLOY_HOOK_URL (Render → Service → Settings → Deploy Hook).
+          # Fallback: build the hook URL from RENDER_SERVICE_ID + RENDER_DEPLOY_KEY.
+          HOOK="$RENDER_DEPLOY_HOOK_URL"
+          if [ -z "$HOOK" ] && [ -n "$RENDER_SERVICE_ID" ] && [ -n "$RENDER_DEPLOY_KEY" ]; then
+            HOOK="https://api.render.com/deploy/srv-${RENDER_SERVICE_ID#srv-}?key=${RENDER_DEPLOY_KEY}"
+          fi
+          if [ -z "$HOOK" ]; then
+            echo "::warning::Render deploy hook not configured (RENDER_DEPLOY_HOOK_URL). Skipping deployment."
             exit 0
           fi
-          
+
           echo "🚀 Triggering Render deployment..."
-          curl -X POST https://api.render.com/deploy/srv-$RENDER_SERVICE_ID \
-            -H "Authorization: Bearer $RENDER_DEPLOY_KEY"
-          
+          curl --fail --silent --show-error -X POST "$HOOK" > /dev/null
           echo "✅ Deployment triggered successfully"
-      
+
       - name: Verify deployment health
         run: |
           echo "⏳ Waiting for deployment to stabilize (30 seconds)..."
