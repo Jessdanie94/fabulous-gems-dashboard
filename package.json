@@ -17,7 +17,10 @@
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "sync:shopify-sellvia": "node shopify-sellvia-sync.js"
+    "sync:shopify-sellvia": "node shopify-sellvia-sync.js",
+    "start:server": "node server.js",
+    "workers": "node src/workers/run.js",
+    "test": "node --test tests/*.test.js"
   },
   "type": "module",
   "engines": {
@@ -34,6 +37,7 @@
     "@shopify/polaris": "^12.0.0",
     "@shopify/shopify-app-remix": "^4.1.0",
     "@shopify/shopify-app-session-storage-prisma": "^8.0.0",
+    "express": "^4.21.2",
     "isbot": "^5.1.0",
     "prisma": "^6.2.1",
     "react": "^18.2.0",

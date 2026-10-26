@@ -1,6 +1,7 @@
-const express = require('express');
+import express from 'express';
+import { getOrders, getProducts } from '../jdv-core-orchestrator.js';
+
 const router = express.Router();
-const { getOrders, getProducts } = require('../jdv-core-orchestrator');
 
 router.get('/orders', async (req, res) => {
   try {
@@ -20,4 +21,4 @@ router.get('/products', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

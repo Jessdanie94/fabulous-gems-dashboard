@@ -32,3 +32,23 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+// Dead-letter queue for webhook deliveries whose handler failed. Retried by the
+// `webhook-retry` background worker (src/workers/tasks/webhook-retry.js).
+// status: failed | processing | processed | dead
+model WebhookEvent {
+  id            String    @id @default(cuid())
+  webhookId     String    @unique // X-Shopify-Webhook-Id (idempotency key)
+  topic         String
+  shop          String
+  payload       String
+  status        String    @default("failed")
+  attempts      Int       @default(1)
+  nextAttemptAt DateTime?
+  lastError     String?
+  processedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+}
