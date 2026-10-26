@@ -392,3 +392,17 @@ This project is part of the Shopify App ecosystem.
 **App URL:** https://fabulousgemsparlor-store.onrender.com  
 **Store:** fabulousgemsparlor.store  
 **Last Updated:** 2026-09-10
+
+## Background workers
+
+In-process workers (`src/workers/`) keep credentials, payouts, catalog and integration health in sync. They are off unless `WORKERS_ENABLED=true`. Start with `npm run workers` (standalone, serves `/health` and `/workers/status` on `PORT`) or via `server.js`. Env is re-read on every run, so rotated secrets apply without restart; a missing secret skips the run with a warning. Secret values are never logged.
+
+| Worker | Default schedule | Purpose | Failure behavior | Env vars |
+| --- | --- | --- | --- | --- |
+| `token-refresh` | 30 min | Validate Shopify/Sellvia credentials (401/403 flagged) | Recorded, exponential backoff + jitter | `WORKER_TOKEN_REFRESH_ENABLED`, `WORKER_TOKEN_REFRESH_INTERVAL_MS` |
+| `inventory-sync` (off by default) | 1 h | Shopify <-> Sellvia sync via `runSync` (honours `SYNC_DRY_RUN`) | Recorded, backoff | `WORKER_INVENTORY_SYNC_ENABLED`, `WORKER_INVENTORY_SYNC_INTERVAL_MS` |
+| `payout-refresh` | 15 min | Read latest Shopify Payments payouts | Recorded, backoff | `WORKER_PAYOUT_REFRESH_ENABLED`, `WORKER_PAYOUT_REFRESH_INTERVAL_MS` |
+| `webhook-retry` | 5 min | Retry failed webhook deliveries (dead-letter after max attempts) | Item requeued, then dropped | `WORKER_WEBHOOK_RETRY_ENABLED`, `WORKER_WEBHOOK_RETRY_INTERVAL_MS`, `WORKER_WEBHOOK_MAX_ATTEMPTS` |
+| `health-ping` | 10 min | Keep-alive/liveness for Render and Jesse-Autopilot-Bridge | Non-2xx marks run failed | `WORKER_HEALTH_PING_ENABLED`, `WORKER_HEALTH_PING_INTERVAL_MS`, `RENDER_HEALTH_URL`, `BRIDGE_HEALTH_URL`, `BRIDGE_AUTH_TOKEN` |
+
+`GET /workers/status` returns each worker's last run, last success, last error and next scheduled run; `GET /health` returns overall `ok`. Tests: `npm run test:workers`.
