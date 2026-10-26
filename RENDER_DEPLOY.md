@@ -103,6 +103,10 @@ SCOPES: write_products,read_orders,write_orders,read_customers,write_customers,r
 | `SESSION_SECRET` | Yes | `random_hex_string` | Use `crypto.randomBytes(32)` |
 | `SCOPES` | Yes | `read_products,...` | Shopify API scopes needed |
 
+## Background Workers (optional)
+
+Background tasks (credential health, webhook retry, drift checks, housekeeping, optional sync) are off by default. To run them as a Render **Background Worker**, create one from the same repo with Start Command `npm run workers`, share the web service's environment variables and set `BACKGROUND_WORKERS_ENABLED=true`. See [docs/BACKGROUND_WORKERS.md](docs/BACKGROUND_WORKERS.md) for the task table, env vars and in-process option.
+
 ## Auto-Deploy
 
 Once configured, Render automatically redeploys when you push to your main branch.
