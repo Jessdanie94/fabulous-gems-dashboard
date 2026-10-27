@@ -79,6 +79,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Preflight - validate required secrets
+        id: preflight
         shell: bash
         run: |
           set -euo pipefail
@@ -88,7 +89,11 @@ jobs:
             key="$1"
             value="$2"
             if [ -z "$value" ]; then
-              echo "::error::Missing required configuration: $key"
+              if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+                echo "::notice::Missing required configuration: $key"
+              else
+                echo "::error::Missing required configuration: $key"
+              fi
               missing=1
             else
               echo "::notice::$key is set"
@@ -146,16 +151,25 @@ jobs:
           check_optional "SYNC_FAILURE_WEBHOOK_URL" "$SYNC_FAILURE_WEBHOOK_URL"
 
           if [ "$missing" -ne 0 ]; then
+            echo "sync_ready=false" >> "$GITHUB_OUTPUT"
+            if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+              echo "::warning::Scheduled sync skipped because required secrets/configuration are missing."
+              exit 0
+            fi
             echo "::error::Preflight failed due to missing required secrets/configuration."
             exit 1
           fi
 
+          echo "sync_ready=true" >> "$GITHUB_OUTPUT"
+
       - name: Set up Node
+        if: steps.preflight.outputs.sync_ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install dependencies
+        if: steps.preflight.outputs.sync_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -172,6 +186,7 @@ jobs:
           fi
 
       - name: Run Shopify/Sellvia sync
+        if: steps.preflight.outputs.sync_ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -186,7 +201,7 @@ jobs:
           fi
 
       - name: Upload sync artifacts
-        if: always()
+        if: always() && steps.preflight.outputs.sync_ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: shopify-sellvia-sync-artifacts
