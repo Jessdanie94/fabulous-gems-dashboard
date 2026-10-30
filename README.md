@@ -406,3 +406,7 @@ In-process workers (`src/workers/`) keep credentials, payouts, catalog and integ
 | `health-ping` | 10 min | Keep-alive/liveness for Render and Jesse-Autopilot-Bridge | Non-2xx marks run failed | `WORKER_HEALTH_PING_ENABLED`, `WORKER_HEALTH_PING_INTERVAL_MS`, `RENDER_HEALTH_URL`, `BRIDGE_HEALTH_URL`, `BRIDGE_AUTH_TOKEN` |
 
 `GET /workers/status` returns each worker's last run, last success, last error and next scheduled run; `GET /health` returns overall `ok`. Tests: `npm run test:workers`.
+
+## Sellvia key rotation
+
+`src/sellvia-keys.js` provides `getSellviaApiKey()`, `sellviaRequest()` (retries once with `SELLVIA_OLD_API_KEY` on a 401 and logs that rotation is pending) and masked logging (`sel_****1234`). `POST /admin/sellvia/rotate-key` with header `X-Admin-Key: $ADMIN_API_KEY` and body `{"new_api_key": "...", "revoke_old_key": true}` verifies the new key (must return 200 from `SELLVIA_VERIFY_PATH`), then swaps it in memory. With `revoke_old_key` the old key is dropped and, if `SELLVIA_REVOKE_URL` is set, a POST to it is made with the old key. The swap is in-memory only; update the env var in your host to persist it.
