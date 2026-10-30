@@ -17,7 +17,9 @@
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "sync:shopify-sellvia": "node shopify-sellvia-sync.js"
+    "sync:shopify-sellvia": "node shopify-sellvia-sync.js",
+    "workers": "node src/workers/run.js",
+    "test:workers": "node --test tests/workers.test.js tests/sellvia-keys.test.js"
   },
   "type": "module",
   "engines": {
