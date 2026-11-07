@@ -1,0 +1,3 @@
+timestamp,type,description,amount,source,cra_line
+2026-11-07T16:05:06+00:00,REVENUE,Batch Sellvia Orders (2 orders),29.98,Shopify,Line 8230
+2026-11-07T16:05:06+00:00,EXPENSE,Shopify Subscription & Apps Settlement,188.08,Shopify,Line 8810
