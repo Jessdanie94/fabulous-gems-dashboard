@@ -25,3 +25,6 @@ pnpm-lock.yaml
 .shopify.lock
 
 /artifacts
+
+# Private financial ledgers
+2026_cra_ledger.csv
