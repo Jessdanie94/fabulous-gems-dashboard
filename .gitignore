@@ -28,3 +28,4 @@ pnpm-lock.yaml
 
 # Private financial ledgers
 2026_cra_ledger.csv
+data/cra_ledger.csv
