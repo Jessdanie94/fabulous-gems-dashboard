@@ -17,7 +17,8 @@
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "sync:shopify-sellvia": "node shopify-sellvia-sync.js"
+    "sync:shopify-sellvia": "node shopify-sellvia-sync.js",
+    "generate-ledger": "python create_ledger.py"
   },
   "type": "module",
   "engines": {
