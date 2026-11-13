@@ -1,6 +1,6 @@
 # Fabulous Gems Dashboard
 
-A comprehensive Shopify Payout Dashboard with integrated Sellvia revenue analytics for fabulousgemsparlor.store.
+A comprehensive Shopify Payout Dashboard with integrated Sellvia revenue analytics for ppd1xp-1c.myshopify.com.
 
 ## Features
 
