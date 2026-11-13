@@ -55,7 +55,7 @@ SHOPIFY_API_KEY=your_shopify_api_key
 SHOPIFY_API_SECRET=your_shopify_api_secret
 SHOPIFY_APP_URL=https://your-app-url.onrender.com
 SCOPES=read_orders,read_products,read_finances
-SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
+SHOPIFY_STORE_DOMAIN=ppd1xp-1c.myshopify.com
 SHOPIFY_API_TOKEN=your_shopify_admin_access_token_here
 SHOPIFY_ADMIN_ACCESS_TOKEN=your_shopify_admin_access_token_here
 SHOPIFY_LOCATION_ID=your_shopify_location_id_here
@@ -141,11 +141,11 @@ docker build -t fabulous-gems-dashboard .
 ### Run Docker Container
 
 ```bash
-docker run -p 3000:3000 \
-  -e SHOPIFY_API_KEY=your_key \
-  -e SHOPIFY_API_SECRET=your_secret \
-  -e SHOPIFY_APP_URL=https://your-url \
-  -e SELLVIA_MASTER_KEY=your_key \
+docker run -p 3000:3000 \\
+  -e SHOPIFY_API_KEY=your_key \\
+  -e SHOPIFY_API_SECRET=your_secret \\
+  -e SHOPIFY_APP_URL=https://your-url \\
+  -e SELLVIA_MASTER_KEY=your_key \\
   fabulous-gems-dashboard
 ```
 
@@ -362,7 +362,7 @@ npm run lint              # Run ESLint
 npm run shopify           # Shopify CLI commands
 npm run prisma            # Prisma CLI commands
 npm run graphql-codegen   # Generate GraphQL types
-npm run vite              # Vite CLI commands
+npm run vite              # Vite commands
 npm run sync:shopify-sellvia  # Run the autonomous Shopify + Sellvia sync entry point
 ```
 
@@ -390,7 +390,8 @@ This project is part of the Shopify App ecosystem.
 ---
 
 **App URL:** https://fabulousgemsparlor-store.onrender.com  
-**Store:** fabulousgemsparlor.store  
+**Store:** ppd1xp-1c.myshopify.com
+
 **Last Updated:** 2026-09-10
 
 ## Background workers

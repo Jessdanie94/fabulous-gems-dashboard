@@ -84,7 +84,7 @@ export default function PayoutsDashboard() {
       <TitleBar title="Revenue & Payouts Dashboard" />
       <BlockStack gap="500">
         <Text as="h1" variant="headingXl">
-          fabulousgemsparlor.store – Revenue & Payouts
+          ppd1xp-1c.myshopify.com – Revenue & Payouts
         </Text>
 
         {/* Key Metrics Section */}

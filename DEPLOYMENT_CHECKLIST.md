@@ -21,7 +21,7 @@ Complete this checklist to ensure your Fabulous Gems Dashboard is production-rea
 - [ ] Shopify Partner Account created: https://partners.shopify.com
 - [ ] Development store created in Partner Dashboard
 - [ ] App created in Partner Dashboard
-- [ ] Store URL noted: `fabulousgemsparlor.store`
+- [ ] Store URL noted: `ppd1xp-1c.myshopify.com`
 
 ### Shopify App Configuration
 - [ ] API Key obtained from Partner Dashboard

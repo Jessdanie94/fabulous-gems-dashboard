@@ -107,8 +107,6 @@ fi
 # Phase 3: Shopify API Connectivity
 print_header "Phase 3: Shopify API Connectivity"
 
-SHOPIFY_API_ENDPOINT="https://shopify.dev/api/admin-graphql"
-
 if [ -z "$SHOPIFY_API_KEY" ] || [ -z "$SHOPIFY_API_SECRET" ]; then
     check_fail "Shopify credentials not configured - skipping API test"
 else
@@ -146,9 +144,9 @@ else
     echo -e "\n${YELLOW}Testing Sellvia API Key validity...${NC}"
     
     # Try to make an authenticated request to Sellvia
-    SELLVIA_TEST=$(curl -s -X GET "https://api.sellvia.com/analytics/revenue?timeframe=month" \
-        -H "Authorization: Bearer $SELLVIA_MASTER_KEY" \
-        -H "Content-Type: application/json" \
+    SELLVIA_TEST=$(curl -s -X GET "https://api.sellvia.com/analytics/revenue?timeframe=month" \\
+        -H "Authorization: ******" \\
+        -H "Content-Type: application/json" \\
         -w "\n%{http_code}" 2>/dev/null | tail -1)
     
     if [ "$SELLVIA_TEST" = "200" ]; then
