@@ -43,7 +43,12 @@ TRANSACTIONS = [
     {"Date": "2026-11-12 08:30:00", "Category": "REVENUE", "Description": "Order Nov 12 Morning Store Sale", "Amount_CAD": 11.99, "Vendor": "Shopify", "CRA_Line": "Line 8230"},
     {"Date": "2026-11-12 09:00:21", "Category": "REVENUE", "Description": "Order WON-MGX8VOV8TNEW", "Amount_CAD": 12.99, "Vendor": "Shopify", "CRA_Line": "Line 8230"},
     {"Date": "2026-11-12 13:15:00", "Category": "REVENUE", "Description": "Order Nov 12 1:15 PM Sale", "Amount_CAD": 12.99, "Vendor": "Shopify", "CRA_Line": "Line 8230"},
-    {"Date": "2026-11-12 20:10:00", "Category": "EXPENSE", "Description": "Sellvia Wholesale Order Fulfillment (11 Paid Orders Batch)", "Amount_CAD": 69.79, "Vendor": "Sellvia", "CRA_Line": "Line 8810"}
+    {"Date": "2026-11-12 20:10:00", "Category": "EXPENSE", "Description": "Sellvia Wholesale Order Fulfillment (11 Paid Orders Batch)", "Amount_CAD": 69.79, "Vendor": "Sellvia", "CRA_Line": "Line 8810"},
+    {"Date": "2026-11-12 23:59:00", "Category": "REVENUE", "Description": "Order Nov 12-13 Store Sales Batch (Remaining Delta)", "Amount_CAD": 51.96, "Vendor": "Shopify", "CRA_Line": "Line 8230"},
+    {"Date": "2026-11-13 04:16:00", "Category": "REVENUE", "Description": "Order Nov 13 4:16 AM Sale", "Amount_CAD": 12.99, "Vendor": "Shopify", "CRA_Line": "Line 8230"},
+    {"Date": "2026-11-13 06:01:00", "Category": "REVENUE", "Description": "Order Nov 13 6:01 AM Sale", "Amount_CAD": 18.98, "Vendor": "Shopify", "CRA_Line": "Line 8230"},
+    {"Date": "2026-11-13 09:30:29", "Category": "REVENUE", "Description": "Order WON-6ZE0D2I4AAXV", "Amount_CAD": 12.99, "Vendor": "Shopify", "CRA_Line": "Line 8230"},
+    {"Date": "2026-11-13 10:43:00", "Category": "EXPENSE", "Description": "Sellvia Wholesale Order Fulfillment (18 Paid Orders Batch)", "Amount_CAD": 121.39, "Vendor": "Sellvia", "CRA_Line": "Line 8810"}
 ]
 
 def create_ledger():
