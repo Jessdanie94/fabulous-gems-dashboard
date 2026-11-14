@@ -1,4 +1,4 @@
- Nov 8 Store Sale,12.99,Shopify,Line 8230
+yes Nov 8 Store Sale,12.99,Shopify,Line 8230
 2026-11-09 04:30:00,REVENUE,Order #1049 Store Sale,12.99,Shopify,Line 8230
 2026-11-09 07:00:00,REVENUE,Order #1048 Store Sale,19.99,Shopify,Line 8230
 2026-11-09 08:00:36,REVENUE,Order WON-S9NNJA84X779,9.99,Shopify,Line 8230
@@ -23,3 +23,12 @@
 2026-11-12 09:00:21,REVENUE,Order WON-MGX8VOV8TNEW,12.99,Shopify,Line 8230
 2026-11-12 13:15:00,REVENUE,Order Nov 12 1:15 PM Sale,12.99,Shopify,Line 8230
 2026-11-12 20:10:00,EXPENSE,Sellvia Wholesale Order Fulfillment (11 Paid Orders Batch),69.79,Sellvia,Line 8810
+2026-11-13,Sellvia,Sellvia Order Processing Credits Top-up ($200 Batch),Cost of Goods Sold / Fulfillment,CRA Line 8320,EXPENSE,200.00,0.00,200.00,CAD,Sellvia Fulfillment Wallet Top-up (Nov 13 2026)
+2026-11-13,Sellvia,Sellvia Order Processing Credits Top-up ($56 Batch),Cost of Goods Sold / Fulfillment,CRA Line 8320,EXPENSE,56.00,0.00,56.00,CAD,Sellvia Fulfillment Wallet Top-up (Nov 13 2026)
+2026-11-14,Shopify / Sellvia Customer,Online Store Sale (Nov 14 Batch - Order #83),Gross Sales Revenue,CRA Line 8000,INCOME,12.99,0.00,12.99,CAD,Reconciled Nov 14 order batch ($57.95 total across 4 new orders)
+2026-11-14,Shopify / Sellvia Customer,Online Store Sale (Nov 14 03:31 AM - Order #84),Gross Sales Revenue,CRA Line 8000,INCOME,12.99,0.00,12.99,CAD,Sellvia Recent Activity Nov 14 2026 3:31 AM
+2026-11-14,Shopify / Sellvia Customer,Online Store Sale (Nov 14 04:01 AM - Order #85),Gross Sales Revenue,CRA Line 8000,INCOME,14.99,0.00,14.99,CAD,Sellvia Recent Activity Nov 14 2026 4:01 AM
+2026-11-14,Shopify / Sellvia Customer,Online Store Sale WON-3GJOV3SMX2XH (Nov 14 04:16 AM - Order #86),Gross Sales Revenue,CRA Line 8000,INCOME,16.98,0.00,16.98,CAD,Sellvia Recent Activity Nov 14 2026 4:16 AM (Source: Sellvia Ads)
+2026-11-14,Shopify / Sellvia Customer,Online Store Sale (Nov 14 06:01 AM - Order #87),Gross Sales Revenue,CRA Line 8000,INCOME,12.99,0.00,12.99,CAD,Sellvia History Nov 14 2026 6:01 AM (wonderfulgemspoint.shop)
+2026-11-14,Shopify / Sellvia Customer,Online Store Sale (Nov 14 06:01 AM - Order #88),Gross Sales Revenue,CRA Line 8000,INCOME,14.99,0.00,14.99,CAD,Sellvia History Nov 14 2026 6:01 AM (wonderfulgemspoint.shop)
+2026-11-14,Shopify / Sellvia Customer,Online Store Sale WON-CWGSZFZP4RWO (Nov 14 08:15 AM - Order #89),Gross Sales Revenue,CRA Line 8000,INCOME,14.99,0.00,14.99,CAD,Sellvia Mobile App Nov 14 2026 8:15:20 AM (Source: Sellvia Ads | Net Profit: $7.04)
