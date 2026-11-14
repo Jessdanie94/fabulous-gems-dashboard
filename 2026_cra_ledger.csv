@@ -1,17 +1,4 @@
-Date,Category,Description,Amount_CAD,Vendor,CRA_Line
-2026-11-01 10:15:00,REVENUE,Sellvia Customer Order Revenue,455.05,Shopify,Line 8230
-2026-11-01 12:00:00,REVENUE,Historical Store Sales Adjustment,121.5,Shopify,Line 8230
-2026-11-06 17:32:00,EXPENSE,Sellvia Wholesale Order Fulfillment,30.45,Sellvia,Line 8810
-2026-11-06 23:07:00,EXPENSE,Sellvia Wholesale Order Fulfillment,19.28,Sellvia,Line 8810
-2026-11-07 03:45:00,REVENUE,Order Nov 7 Store Sale,19.99,Shopify,Line 8230
-2026-11-07 05:30:46,REVENUE,Order WON-WTTW2E1XQ380,20.99,Shopify,Line 8230
-2026-11-07 06:00:37,REVENUE,Order WON-0CB7057E4Z62,20.99,Shopify,Line 8230
-2026-11-07 12:10:00,EXPENSE,Shopify Bill #A610817303 (POS Pro & Apps),133.09,Shopify,Line 8810
-2026-11-07 15:30:15,REVENUE,Order WON-Q1L7VJN7T820,12.99,Shopify,Line 8230
-2026-11-08 03:46:00,REVENUE,Order Nov 8 Store Sale,11.99,Shopify,Line 8230
-2026-11-08 04:45:00,REVENUE,Order Nov 8 Store Sale,9.99,Shopify,Line 8230
-2026-11-08 04:45:43,REVENUE,Order WON-12B1ZKYFEWFB,11.99,Shopify,Line 8230
-2026-11-08 04:45:43,REVENUE,Order Nov 8 Store Sale,12.99,Shopify,Line 8230
+ Nov 8 Store Sale,12.99,Shopify,Line 8230
 2026-11-09 04:30:00,REVENUE,Order #1049 Store Sale,12.99,Shopify,Line 8230
 2026-11-09 07:00:00,REVENUE,Order #1048 Store Sale,19.99,Shopify,Line 8230
 2026-11-09 08:00:36,REVENUE,Order WON-S9NNJA84X779,9.99,Shopify,Line 8230
