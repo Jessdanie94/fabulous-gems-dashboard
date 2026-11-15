@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  NODE_VERSION: '20.19'
+  NODE_VERSION: '22.15.0'
 
 jobs:
   build:
