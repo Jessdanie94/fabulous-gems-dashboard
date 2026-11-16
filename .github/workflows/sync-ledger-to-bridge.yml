@@ -1,0 +1,59 @@
+name: Sync ledger to Jesse Autopilot Bridge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 2026_cra_ledger.csv
+      - 2026_cra_summary.csv
+  workflow_dispatch:
+
+env:
+  TARGET_REPO: Jesse-s-Digital-Ventures/Jesse-Autopilot-Bridge.onrender.com
+  TARGET_BRANCH: main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for token
+        id: guard
+        run: |
+          if [ -z "$BRIDGE_SYNC_TOKEN" ]; then
+            echo "BRIDGE_SYNC_TOKEN is not set; skipping sync."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          BRIDGE_SYNC_TOKEN: ${{ secrets.BRIDGE_SYNC_TOKEN }}
+
+      - name: Checkout source
+        if: steps.guard.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      - name: Checkout target
+        if: steps.guard.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          ref: ${{ env.TARGET_BRANCH }}
+          token: ${{ secrets.BRIDGE_SYNC_TOKEN }}
+          path: target
+
+      - name: Copy ledger files and push
+        if: steps.guard.outputs.enabled == 'true'
+        run: |
+          cp source/2026_cra_ledger.csv source/2026_cra_summary.csv target/
+          cd target
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No ledger changes to sync."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 2026_cra_ledger.csv 2026_cra_summary.csv
+          git commit -m "Sync ledger from ppd1xp-1c.myshopify.com@${GITHUB_SHA::7}"
+          git push origin "HEAD:${TARGET_BRANCH}"
