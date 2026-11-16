@@ -726,5 +726,44 @@
     "Net_Amount": 12.99,
     "Currency": "CAD",
     "Receipt_or_Proof": "Sellvia Mobile App Nov 15 2026 6:16:36 AM (Source: Sellvia Ads | Net Profit: $6.04)"
+  },
+  {
+    "Date": "2026-11-15",
+    "Vendor_or_Customer": "Sellvia Storefront Customer",
+    "Description": "Store Order Sale (Nov 15 5:00 PM)",
+    "CRA_Category": "Gross Sales / Revenue",
+    "CRA_Line": "Gross Revenue",
+    "Type": "REVENUE",
+    "Gross_Amount": 14.99,
+    "Tax_GST_HST": 0.0,
+    "Net_Amount": 14.99,
+    "Currency": "CAD",
+    "Receipt_or_Proof": "User-provided transaction"
+  },
+  {
+    "Date": "2026-11-15",
+    "Vendor_or_Customer": "Sellvia Storefront Customer",
+    "Description": "Store Order WON-Y9ENISCMK91M ($6.19 est. net profit)",
+    "CRA_Category": "Gross Sales / Revenue",
+    "CRA_Line": "Gross Revenue",
+    "Type": "REVENUE",
+    "Gross_Amount": 12.99,
+    "Tax_GST_HST": 0.0,
+    "Net_Amount": 12.99,
+    "Currency": "CAD",
+    "Receipt_or_Proof": "User-provided transaction"
+  },
+  {
+    "Date": "2026-11-15",
+    "Vendor_or_Customer": "Sellvia",
+    "Description": "Sellvia Pro Subscription Renewal ($22.40 USD)",
+    "CRA_Category": "Software & Subscriptions",
+    "CRA_Line": "CRA Line 8810",
+    "Type": "EXPENSE",
+    "Gross_Amount": 31.94,
+    "Tax_GST_HST": 0.0,
+    "Net_Amount": 31.94,
+    "Currency": "CAD",
+    "Receipt_or_Proof": "Converted at Bank of Canada rate 1.4257 CAD/USD (2026-11-13; latest available for 2026-11-15)"
   }
 ]
