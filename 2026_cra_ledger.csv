@@ -55,4 +55,6 @@ Date,Vendor_or_Customer,Description,CRA_Category,CRA_Line,Type,Gross_Amount,Tax_
 2026-11-15,Shopify / Sellvia Customer,Online Store Sale Order #92 (Nov 15 04:31 AM),Gross Sales Revenue,CRA Line 8000,INCOME,12.99,0.00,12.99,CAD,Sellvia Mobile App Nov 15 2026 4:31 AM (Order #92 of 94)
 2026-11-15,Shopify / Sellvia Customer,Online Store Sale WON-3GJOV3SMX2XH (Nov 15 06:16 AM - Order #93),Gross Sales Revenue,CRA Line 8000,INCOME,16.98,0.00,16.98,CAD,Sellvia Mobile App Nov 15 2026 6:16 AM (Order #93 of 94)
 2026-11-15,Shopify / Sellvia Customer,Online Store Sale WON-52O2WSQHOR1Z (Nov 15 06:16 AM - Order #94),Gross Sales Revenue,CRA Line 8000,INCOME,12.99,0.00,12.99,CAD,Sellvia Mobile App Nov 15 2026 6:16:36 AM (Source: Sellvia Ads | Net Profit: $6.04)
+2026-11-15,Sellvia Storefront Customer,Store Order Sale (Nov 15 5:00 PM),Gross Sales / Revenue,Gross Revenue,REVENUE,14.99,0.00,14.99,CAD,User-provided transaction
+2026-11-15,Sellvia Storefront Customer,Store Order WON-Y9ENISCMK91M ($6.19 est. net profit),Gross Sales / Revenue,Gross Revenue,REVENUE,12.99,0.00,12.99,CAD,User-provided transaction
 2026-11-15,Sellvia,Sellvia Pro Subscription Renewal ($22.40 USD),Software & Subscriptions,CRA Line 8810,EXPENSE,31.94,0.00,31.94,CAD,Converted at Bank of Canada rate 1.4257 CAD/USD (2026-11-13; latest available for 2026-11-15)

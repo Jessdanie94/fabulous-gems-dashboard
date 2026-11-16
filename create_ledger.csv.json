@@ -729,6 +729,32 @@
   },
   {
     "Date": "2026-11-15",
+    "Vendor_or_Customer": "Sellvia Storefront Customer",
+    "Description": "Store Order Sale (Nov 15 5:00 PM)",
+    "CRA_Category": "Gross Sales / Revenue",
+    "CRA_Line": "Gross Revenue",
+    "Type": "REVENUE",
+    "Gross_Amount": 14.99,
+    "Tax_GST_HST": 0.0,
+    "Net_Amount": 14.99,
+    "Currency": "CAD",
+    "Receipt_or_Proof": "User-provided transaction"
+  },
+  {
+    "Date": "2026-11-15",
+    "Vendor_or_Customer": "Sellvia Storefront Customer",
+    "Description": "Store Order WON-Y9ENISCMK91M ($6.19 est. net profit)",
+    "CRA_Category": "Gross Sales / Revenue",
+    "CRA_Line": "Gross Revenue",
+    "Type": "REVENUE",
+    "Gross_Amount": 12.99,
+    "Tax_GST_HST": 0.0,
+    "Net_Amount": 12.99,
+    "Currency": "CAD",
+    "Receipt_or_Proof": "User-provided transaction"
+  },
+  {
+    "Date": "2026-11-15",
     "Vendor_or_Customer": "Sellvia",
     "Description": "Sellvia Pro Subscription Renewal ($22.40 USD)",
     "CRA_Category": "Software & Subscriptions",
