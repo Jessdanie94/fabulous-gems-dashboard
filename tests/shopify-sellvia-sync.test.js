@@ -58,6 +58,39 @@ test("buildConfig accepts legacy secret names", async () => {
   );
 });
 
+test("buildConfig reports all missing credentials and scoped feed configuration", async () => {
+  await withEnv(
+    {
+      SHOPIFY_STORE_DOMAIN: undefined,
+      SHOPIFY_ADMIN_ACCESS_TOKEN: undefined,
+      SHOPIFY_API_TOKEN: undefined,
+      SELLVIA_API_KEY: undefined,
+      SELLVIA_MASTER_KEY: undefined,
+      SELLVIA_PRODUCTS_URL: undefined,
+      SELLVIA_PRODUCTS_FILE: undefined,
+      SELLVIA_INVENTORY_URL: undefined,
+      SELLVIA_INVENTORY_FILE: undefined,
+      SELLVIA_PRICES_URL: undefined,
+      SELLVIA_PRICES_FILE: undefined,
+    },
+    async () => {
+      assert.throws(
+        () => buildConfig({ scope: "catalog,inventory,price" }),
+        (error) => {
+          assert.match(error.message, /SHOPIFY_STORE_DOMAIN/);
+          assert.match(error.message, /SHOPIFY_ADMIN_ACCESS_TOKEN or SHOPIFY_API_TOKEN/);
+          assert.match(error.message, /SELLVIA_API_KEY or SELLVIA_MASTER_KEY/);
+          assert.match(error.message, /SELLVIA_PRODUCTS_URL or SELLVIA_PRODUCTS_FILE/);
+          assert.match(error.message, /SELLVIA_INVENTORY_URL or SELLVIA_INVENTORY_FILE/);
+          assert.match(error.message, /SELLVIA_PRICES_URL or SELLVIA_PRICES_FILE/);
+          assert.match(error.message, /Settings > Secrets and variables > Actions/);
+          return true;
+        },
+      );
+    },
+  );
+});
+
 test("buildIdentityKey prefers external id then sku then handle", () => {
   assert.equal(buildIdentityKey({ externalId: "sv-1", sku: "SKU1", handle: "ring" }), "external:sv-1");
   assert.equal(buildIdentityKey({ sku: "SKU1", handle: "ring" }), "sku:sku1");

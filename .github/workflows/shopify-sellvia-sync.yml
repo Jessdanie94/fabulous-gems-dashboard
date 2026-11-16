@@ -83,12 +83,14 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
+          missing_names=()
 
           check_required () {
             key="$1"
             value="$2"
             if [ -z "$value" ]; then
-              echo "::error::Missing required configuration: $key"
+              echo "::error::Missing required secret or configuration: $key"
+              missing_names+=("$key")
               missing=1
             else
               echo "::notice::$key is set"
@@ -146,7 +148,17 @@ jobs:
           check_optional "SYNC_FAILURE_WEBHOOK_URL" "$SYNC_FAILURE_WEBHOOK_URL"
 
           if [ "$missing" -ne 0 ]; then
-            echo "::error::Preflight failed due to missing required secrets/configuration."
+            echo "::error::Add the missing values under Settings > Secrets and variables > Actions, then rerun the workflow."
+            {
+              echo "### Shopify + Sellvia Sync preflight failed"
+              echo
+              echo "Configure these repository secrets under **Settings > Secrets and variables > Actions**:"
+              for name in "${missing_names[@]}"; do
+                echo "- \`$name\`"
+              done
+              echo
+              echo "For credential alternatives, configure at least one of the listed names."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 

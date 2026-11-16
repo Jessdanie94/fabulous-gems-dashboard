@@ -765,5 +765,31 @@
     "Net_Amount": 31.94,
     "Currency": "CAD",
     "Receipt_or_Proof": "Converted at Bank of Canada rate 1.4257 CAD/USD (2026-11-13; latest available for 2026-11-15)"
+  },
+  {
+    "Date": "2026-11-15",
+    "Vendor_or_Customer": "Sellvia Storefront Customer",
+    "Description": "Store Order WON-CVHOBMOUOW72 (Mohammed B.)",
+    "CRA_Category": "Gross Sales / Revenue",
+    "CRA_Line": "Gross Revenue",
+    "Type": "REVENUE",
+    "Gross_Amount": 12.99,
+    "Tax_GST_HST": 0.0,
+    "Net_Amount": 12.99,
+    "Currency": "CAD",
+    "Receipt_or_Proof": "User-provided transaction (Nov 15, 2026, 8:00 PM CST)"
+  },
+  {
+    "Date": "2026-11-15",
+    "Vendor_or_Customer": "Sellvia Storefront Customer",
+    "Description": "Store Order WON-YVVAEBPVJY2Z (Gregory G.)",
+    "CRA_Category": "Gross Sales / Revenue",
+    "CRA_Line": "Gross Revenue",
+    "Type": "REVENUE",
+    "Gross_Amount": 12.99,
+    "Tax_GST_HST": 0.0,
+    "Net_Amount": 12.99,
+    "Currency": "CAD",
+    "Receipt_or_Proof": "User-provided transaction (Nov 15, 2026, 11:30 PM CST)"
   }
 ]

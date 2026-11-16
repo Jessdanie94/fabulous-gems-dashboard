@@ -75,6 +75,37 @@ function getRequiredEnv(names) {
   return value;
 }
 
+function validateRequiredConfiguration(scopes) {
+  const missing = [];
+  const hasAny = (names) => names.some((name) => firstDefined(process.env[name]));
+  const requireAny = (names) => {
+    if (!hasAny(names)) missing.push(names.join(" or "));
+  };
+
+  requireAny(["SHOPIFY_STORE_DOMAIN"]);
+  requireAny(["SHOPIFY_ADMIN_ACCESS_TOKEN", "SHOPIFY_API_TOKEN"]);
+  requireAny(["SELLVIA_API_KEY", "SELLVIA_MASTER_KEY"]);
+
+  for (const [scope, sourceNames] of [
+    ["catalog", ["SELLVIA_PRODUCTS_URL", "SELLVIA_PRODUCTS_FILE"]],
+    ["inventory", ["SELLVIA_INVENTORY_URL", "SELLVIA_INVENTORY_FILE"]],
+    ["price", ["SELLVIA_PRICES_URL", "SELLVIA_PRICES_FILE"]],
+    ["orders", ["SELLVIA_ORDERS_URL", "SELLVIA_ORDERS_FILE"]],
+  ]) {
+    if (scopes.includes(scope)) requireAny(sourceNames);
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        "Missing required sync configuration:",
+        ...missing.map((name) => `- ${name}`),
+        "Set the listed values in GitHub Settings > Secrets and variables > Actions, or in your local environment.",
+      ].join("\n"),
+    );
+  }
+}
+
 function parseScopes(rawScope) {
   if (!rawScope || rawScope === "all") return [...VALID_SCOPES];
   const scopes = rawScope
@@ -93,6 +124,7 @@ function parseScopes(rawScope) {
 export function buildConfig(options = {}) {
   const dryRun = envBoolean(firstDefined(options.dryRun, process.env.SYNC_DRY_RUN), true);
   const scopes = parseScopes(firstDefined(options.scope, process.env.SYNC_SCOPE, "catalog,inventory,price"));
+  validateRequiredConfiguration(scopes);
   const writesEnabled = envBoolean(process.env.SYNC_ENABLE_WRITES, false) && !dryRun;
 
   return {
