@@ -1,0 +1,21 @@
+{
+  "name": "stripe-durable-queue-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Isolated, explicitly invoked PostgreSQL Stripe event queue",
+  "exports": { ".": "./src/index.js" },
+  "scripts": {
+    "generate": "prisma generate --schema prisma/schema.prisma",
+    "migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
+    "validate": "prisma validate --schema prisma/schema.prisma",
+    "check": "node --check src/index.js && node --check src/validation.js && node --check src/queue.js",
+    "test": "node --test tests/*.test.js",
+    "test:integration": "node --test tests/*.test.js"
+  },
+  "engines": { "node": ">=20.19" },
+  "dependencies": { "@prisma/client": "6.19.3" },
+  "devDependencies": { "prisma": "6.19.3" },
+  "overrides": { "deepmerge-ts": "8.0.2", "effect": "3.22.5" }
+}

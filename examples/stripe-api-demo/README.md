@@ -56,6 +56,10 @@ python3 stripe_demo.py --write --run-id PUT_THE_32_CHARACTER_RUN_ID_HERE
 
 Each creation has a stable, operation-specific idempotency key, so Stripe can return the original response instead of duplicating the same request. Retry with identical parameters. Stripe may prune idempotency keys after they are at least 24 hours old, so an old retry can create new objects. Keep track of created IDs when building a real integration. Do not use the Dashboard's bulk test-data deletion for cleanup unless you deliberately intend to delete *all* relevant sandbox data.
 
+## Durable webhook queue and order mapping
+
+The separately configured [PostgreSQL/Prisma queue](./durable-queue/README.md) provides an event inbox, order-to-PaymentIntent mappings, leases, and reconciliation records. It does not install a webhook route, start a worker, or fulfill an order automatically. Read its security and integration requirements before using it.
+
 ## What else can Stripe do?
 
 - **Payments and checkout:** accept payments through hosted Checkout, payment links, or custom integrations using PaymentIntents and Stripe's payment UI.

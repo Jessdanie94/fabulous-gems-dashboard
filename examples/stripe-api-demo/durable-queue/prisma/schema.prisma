@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("STRIPE_DATABASE_URL")
+}
+
+model StripeOrder {
+  id              String   @id
+  accountId       String
+  livemode        Boolean
+  externalOrderId String
+  amount          BigInt
+  currency        String
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  mappings        PaymentIntentMapping[]
+  operation       FulfillmentOperation?
+
+  @@unique([accountId, livemode, externalOrderId])
+  @@unique([id, accountId, livemode])
+}
+
+model PaymentIntentMapping {
+  id              String   @id
+  orderId         String
+  accountId       String
+  livemode        Boolean
+  paymentIntentId String   @unique
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  order           StripeOrder @relation(fields: [orderId, accountId, livemode], references: [id, accountId, livemode], onDelete: Restrict, onUpdate: Restrict)
+  operations      FulfillmentOperation[]
+
+  @@unique([id, orderId, accountId, livemode])
+  @@index([orderId])
+}
+
+model StripeEvent {
+  eventId         String   @id
+  accountId       String
+  livemode        Boolean
+  eventType       String
+  paymentIntentId String
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  job             StripeJob?
+}
+
+model StripeJob {
+  id                 String   @id
+  eventId            String   @unique
+  status             String   @default("PENDING")
+  attempts           Int      @default(0)
+  maxAttempts        Int      @default(10)
+  availableAt        DateTime @default(now()) @db.Timestamptz(6)
+  leaseToken         String?
+  leaseExpiresAt     DateTime? @db.Timestamptz(6)
+  operationId        String?
+  verifiedLeaseToken String?
+  verifiedAt         DateTime? @db.Timestamptz(6)
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @db.Timestamptz(6)
+  event              StripeEvent @relation(fields: [eventId], references: [eventId], onDelete: Restrict, onUpdate: Restrict)
+  operation          FulfillmentOperation? @relation("PreparedOperation", fields: [operationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  claimedOperations  FulfillmentOperation[] @relation("ClaimedByJob")
+  redrives           JobRedrive[]
+
+  @@index([status, availableAt, createdAt])
+  @@index([status, leaseExpiresAt])
+}
+
+model JobRedrive {
+  id                String   @id
+  jobId             String
+  actor             String
+  evidenceReference String
+  priorAttempts     Int
+  priorMaxAttempts  Int
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  job               StripeJob @relation(fields: [jobId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([jobId, createdAt])
+}
+
+model FulfillmentOperation {
+  id                    String   @id
+  orderId               String   @unique
+  accountId             String
+  livemode              Boolean
+  sourceMappingId       String
+  idempotencyKey        String   @unique
+  status                String   @default("READY")
+  claimedByJobId        String?
+  leaseToken            String?
+  leaseExpiresAt        DateTime? @db.Timestamptz(6)
+  completionTokenHash   String?
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime @default(now()) @db.Timestamptz(6)
+  order                 StripeOrder @relation(fields: [orderId, accountId, livemode], references: [id, accountId, livemode], onDelete: Restrict, onUpdate: Restrict)
+  sourceMapping         PaymentIntentMapping @relation(fields: [sourceMappingId, orderId, accountId, livemode], references: [id, orderId, accountId, livemode], onDelete: Restrict, onUpdate: Restrict)
+  claimedByJob          StripeJob? @relation("ClaimedByJob", fields: [claimedByJobId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  preparedJobs          StripeJob[] @relation("PreparedOperation")
+  reconciliations       FulfillmentReconciliation[]
+
+  @@unique([orderId, accountId, livemode])
+  @@index([status, leaseExpiresAt])
+  @@index([claimedByJobId])
+}
+
+model FulfillmentReconciliation {
+  id                String   @id
+  operationId       String
+  decision          String
+  actor             String
+  evidenceReference String
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  operation         FulfillmentOperation @relation(fields: [operationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([operationId, createdAt])
+}
