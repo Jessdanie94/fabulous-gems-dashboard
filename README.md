@@ -266,6 +266,10 @@ Scheduled runs execute every 30 minutes with `SYNC_DRY_RUN=true` by default.
 - When `SYNC_FAILURE_WEBHOOK_URL` is configured, the failure summary is POSTed to that webhook.
 - Local dry-run validation can use `SHOPIFY_PRODUCTS_FILE` plus `SELLVIA_*_FILE` inputs to simulate feeds without live credentials.
 
+## Stripe API sandbox demo
+
+The standalone [Stripe API demo](./examples/stripe-api-demo/README.md) demonstrates test-mode customer, catalog, and payment operations. It runs only when explicitly launched and is not connected to the Shopify dashboard or its deployment workflows.
+
 ## API Services
 
 ### Shopify Finances Service
